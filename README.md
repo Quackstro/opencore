@@ -1,4 +1,4 @@
-# 🦆 Opencore
+# 🥚 Opencore
 
 **Quackstro's fork of [OpenClaw](https://github.com/openclaw/openclaw)** — a personal AI assistant you run on your own devices.
 
