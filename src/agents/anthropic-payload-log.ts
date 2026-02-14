@@ -1,9 +1,9 @@
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
+import { guardedAppend } from "../logging/circuit-breaker.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
@@ -48,22 +48,27 @@ function resolvePayloadLogConfig(env: NodeJS.ProcessEnv): PayloadLogConfig {
   return { enabled, filePath };
 }
 
+/** Max size for payload log files (20 MB). */
+const MAX_PAYLOAD_LOG_BYTES = 20 * 1024 * 1024;
+
 function getWriter(filePath: string): PayloadLogWriter {
   const existing = writers.get(filePath);
   if (existing) {
     return existing;
   }
 
-  const dir = path.dirname(filePath);
-  const ready = fs.mkdir(dir, { recursive: true }).catch(() => undefined);
   let queue = Promise.resolve();
 
   const writer: PayloadLogWriter = {
     filePath,
     write: (line: string) => {
       queue = queue
-        .then(() => ready)
-        .then(() => fs.appendFile(filePath, line, "utf8"))
+        .then(() =>
+          guardedAppend(filePath, line, {
+            maxFileBytes: MAX_PAYLOAD_LOG_BYTES,
+            keepTailBytes: 2 * 1024 * 1024,
+          }),
+        )
         .catch(() => undefined);
     },
   };

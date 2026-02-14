@@ -52,8 +52,29 @@ export type BedrockDiscoveryConfig = {
   defaultMaxTokens?: number;
 };
 
+/**
+ * Model capability override for incremental changes.
+ */
+export type ModelCapabilityOverride = {
+  /** Capabilities to add to the base set */
+  add?: string[];
+  /** Capabilities to remove from the base set */
+  remove?: string[];
+};
+
+/**
+ * Per-model capability definition.
+ * Either a full capability list or an override object.
+ */
+export type ModelCapabilityEntry = string[] | ModelCapabilityOverride;
+
 export type ModelsConfig = {
   mode?: "merge" | "replace";
   providers?: Record<string, ModelProviderConfig>;
   bedrockDiscovery?: BedrockDiscoveryConfig;
+  /**
+   * Model capability definitions for skill routing.
+   * Keys are model IDs (e.g., "anthropic/claude-opus-4").
+   */
+  capabilities?: Record<string, ModelCapabilityEntry>;
 };

@@ -47,10 +47,78 @@ export async function runCli(argv: string[] = process.argv) {
   // These log the error and exit gracefully instead of crashing without trace.
   installUnhandledRejectionHandler();
 
+  let _handlingException = false;
   process.on("uncaughtException", (error) => {
-    console.error("[openclaw] Uncaught exception:", formatUncaughtError(error));
-    process.exit(1);
+    const errCode = (error as NodeJS.ErrnoException).code;
+
+    // EPIPE/EIO means the output pipe is broken - logging would just trigger
+    // another EPIPE, creating an infinite cascade. Silently ignore.
+    if (errCode === "EPIPE" || errCode === "EIO") {
+      return;
+    }
+
+    // Re-entrancy guard: if logging inside this handler throws, don't recurse.
+    if (_handlingException) {
+      return;
+    }
+    _handlingException = true;
+    try {
+      _handleUncaughtException(error);
+    } finally {
+      _handlingException = false;
+    }
   });
+
+  function _handleUncaughtException(error: Error): void {
+    // FATAL errors that MUST crash - everything else gets suppressed
+    const fatalErrorCodes = new Set([
+      "ERR_OUT_OF_MEMORY",
+      "ERR_SCRIPT_EXECUTION_TIMEOUT",
+      "ERR_WORKER_OUT_OF_MEMORY",
+      "ERR_WORKER_INITIALIZATION_FAILED",
+      "INVALID_CONFIG",
+      "MISSING_API_KEY",
+      "ENOSPC", // Disk full
+    ]);
+
+    const errCode = (error as NodeJS.ErrnoException).code;
+    const errMsg = error.message || "";
+
+    // Check for fatal conditions
+    const isFatal =
+      (errCode && fatalErrorCodes.has(errCode)) ||
+      errMsg.includes("out of memory") ||
+      errMsg.includes("heap out of memory") ||
+      errMsg.includes("Cannot find module") || // Missing required module
+      error.name === "SyntaxError"; // Code error
+
+    if (isFatal) {
+      console.error("[openclaw] FATAL uncaught exception (crashing):", formatUncaughtError(error));
+      process.exit(1);
+    }
+
+    // Non-fatal: log and continue
+    // Self-healing system will pick this up from logs
+    console.warn(
+      "[openclaw] Suppressed non-fatal exception (continuing):",
+      formatUncaughtError(error),
+    );
+
+    // Log structured error for crash-recovery analysis
+    const structuredLog = {
+      ts: new Date().toISOString(),
+      level: "error",
+      component: "exception-handler",
+      event: "suppressed_exception",
+      error: {
+        name: error.name,
+        message: errMsg,
+        code: errCode,
+        stack: error.stack?.split("\n").slice(0, 5).join("\n"),
+      },
+    };
+    console.error(JSON.stringify(structuredLog));
+  }
 
   const parseArgv = rewriteUpdateFlagArgv(normalizedArgv);
   // Register the primary subcommand if one exists (for lazy-loading)

@@ -6,6 +6,7 @@ import {
 import fs from "node:fs";
 import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
+import type { RoutingContext, RoutingResult } from "./routing/types.js";
 import type {
   ParsedSkillFrontmatter,
   SkillEligibilityContext,
@@ -23,6 +24,7 @@ import {
   resolveSkillInvocationPolicy,
 } from "./frontmatter.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
+import { routeSkillsSync } from "./routing/router.js";
 import { serializeByKey } from "./serialize.js";
 
 const fsp = fs.promises;
@@ -188,6 +190,16 @@ function loadSkillEntries(
   return skillEntries;
 }
 
+/**
+ * Extended SkillSnapshot with routing metadata.
+ */
+export type SkillSnapshotWithRouting = SkillSnapshot & {
+  /** Routing result if dynamic routing was applied */
+  routingResult?: RoutingResult;
+  /** Eligible skill entries for thinking resolution */
+  entries?: SkillEntry[];
+};
+
 export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
   opts?: {
@@ -199,21 +211,69 @@ export function buildWorkspaceSkillSnapshot(
     skillFilter?: string[];
     eligibility?: SkillEligibilityContext;
     snapshotVersion?: number;
+    /**
+     * If provided, enables dynamic skill routing based on message context.
+     * When routingContext is set, skills are filtered based on the routing
+     * configuration (skills.routing) in the config.
+     */
+    routingContext?: RoutingContext;
   },
-): SkillSnapshot {
+): SkillSnapshotWithRouting {
   const skillEntries = opts?.entries ?? loadSkillEntries(workspaceDir, opts);
-  const eligible = filterSkillEntries(
+  let eligible = filterSkillEntries(
     skillEntries,
     opts?.config,
     opts?.skillFilter,
     opts?.eligibility,
   );
+
+  // Apply dynamic routing if context is provided and routing is configured
+  let routingResult: RoutingResult | undefined;
+  if (opts?.routingContext && opts?.config?.skills?.routing) {
+    const routingConfig = opts.config.skills.routing;
+
+    // Only apply routing if mode is not static (or if mode is unset but config exists)
+    if (routingConfig.mode && routingConfig.mode !== "static") {
+      routingResult = routeSkillsSync(
+        eligible,
+        opts.routingContext,
+        {
+          mode: routingConfig.mode,
+          dynamic: routingConfig.dynamic,
+          hybrid: routingConfig.hybrid,
+          domainAliases: routingConfig.domainAliases,
+        },
+        opts.config.models?.capabilities
+          ? {
+              capabilities: opts.config.models.capabilities as Record<
+                string,
+                string[] | import("./routing/types.js").ModelCapabilityOverride
+              >,
+            }
+          : undefined,
+      );
+
+      // Filter to only routed skills
+      const selectedSet = new Set(routingResult.selectedSkills);
+      eligible = eligible.filter((e) => selectedSet.has(e.skill.name));
+
+      skillsLogger.info("skill-routing-applied", {
+        mode: routingResult.method,
+        original: skillEntries.length,
+        eligible: eligible.length,
+        selected: routingResult.selectedSkills.length,
+        capabilityExcluded: routingResult.capabilityExclusions?.length ?? 0,
+      });
+    }
+  }
+
   const promptEntries = eligible.filter(
     (entry) => entry.invocation?.disableModelInvocation !== true,
   );
   const resolvedSkills = promptEntries.map((entry) => entry.skill);
   const remoteNote = opts?.eligibility?.remote?.note?.trim();
   const prompt = [remoteNote, formatSkillsForPrompt(resolvedSkills)].filter(Boolean).join("\n");
+
   return {
     prompt,
     skills: eligible.map((entry) => ({
@@ -222,6 +282,8 @@ export function buildWorkspaceSkillSnapshot(
     })),
     resolvedSkills,
     version: opts?.snapshotVersion,
+    routingResult,
+    entries: eligible,
   };
 }
 

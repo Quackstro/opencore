@@ -5,6 +5,7 @@ import type { AnyAgentTool } from "./common.js";
 import { formatThinkingLevels, normalizeThinkLevel } from "../../auto-reply/thinking.js";
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import {
   isSubagentSessionKey,
   normalizeAgentId,
@@ -14,6 +15,11 @@ import { normalizeDeliveryContext } from "../../utils/delivery-context.js";
 import { resolveAgentConfig } from "../agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
 import { optionalStringEnum } from "../schema/typebox.js";
+import {
+  detectSkillFromTask,
+  selectModelForSkill,
+  getAvailableModels,
+} from "../skills/routing/index.js";
 import { buildSubagentSystemPrompt } from "../subagent-announce.js";
 import { registerSubagentRun } from "../subagent-registry.js";
 import { jsonResult, readStringParam } from "./common.js";
@@ -22,6 +28,8 @@ import {
   resolveInternalSessionKey,
   resolveMainSessionAlias,
 } from "./sessions-helpers.js";
+
+const spawnLogger = createSubsystemLogger("sessions-spawn");
 
 const SessionsSpawnToolSchema = Type.Object({
   task: Type.String(),
@@ -168,7 +176,7 @@ export function createSessionsSpawnTool(opts?: {
       const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
       const spawnedByKey = requesterInternalKey;
       const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
-      const resolvedModel =
+      let resolvedModel =
         normalizeModelSelection(modelOverride) ??
         normalizeModelSelection(targetAgentConfig?.subagents?.model) ??
         normalizeModelSelection(cfg.agents?.defaults?.subagents?.model);
@@ -177,8 +185,51 @@ export function createSessionsSpawnTool(opts?: {
         readStringParam(targetAgentConfig?.subagents ?? {}, "thinking") ??
         readStringParam(cfg.agents?.defaults?.subagents ?? {}, "thinking");
 
+      // Skill-based model and thinking auto-selection
+      let skillBasedThinking: string | undefined;
+      let skillAutoSelected = false;
+      if (!modelOverride && cfg.skills?.routing?.mode !== "static") {
+        const skillDetection = detectSkillFromTask(task);
+        if (skillDetection.syntheticSkill && skillDetection.confidence > 0) {
+          const availableModels = getAvailableModels(cfg);
+          const currentModel =
+            resolvedModel ??
+            normalizeModelSelection(cfg.agents?.defaults?.model) ??
+            "anthropic/claude-sonnet-4";
+          const modelSelection = selectModelForSkill(
+            skillDetection.syntheticSkill,
+            availableModels,
+            currentModel,
+            cfg,
+          );
+
+          if (modelSelection.model !== currentModel) {
+            resolvedModel = modelSelection.model;
+            skillAutoSelected = true;
+            spawnLogger.info("subagent-model-auto-selected", {
+              task: task.slice(0, 100),
+              domains: skillDetection.domains,
+              model: modelSelection.model,
+              reason: modelSelection.reason,
+              capabilities: skillDetection.inferredCapabilities,
+            });
+          }
+
+          // Apply skill-suggested thinking if no explicit thinking was requested
+          if (modelSelection.thinking && !thinkingOverrideRaw) {
+            skillBasedThinking = modelSelection.thinking;
+            spawnLogger.debug("subagent-thinking-suggested", {
+              task: task.slice(0, 100),
+              thinking: skillBasedThinking,
+              domains: skillDetection.domains,
+            });
+          }
+        }
+      }
+
       let thinkingOverride: string | undefined;
-      const thinkingCandidateRaw = thinkingOverrideRaw || resolvedThinkingDefaultRaw;
+      const thinkingCandidateRaw =
+        thinkingOverrideRaw || skillBasedThinking || resolvedThinkingDefaultRaw;
       if (thinkingCandidateRaw) {
         const normalized = normalizeThinkLevel(thinkingCandidateRaw);
         if (!normalized) {
@@ -300,6 +351,7 @@ export function createSessionsSpawnTool(opts?: {
         childSessionKey,
         runId: childRunId,
         modelApplied: resolvedModel ? modelApplied : undefined,
+        skillAutoSelected: skillAutoSelected || undefined,
         warning: modelWarning,
       });
     },

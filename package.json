@@ -6,7 +6,8 @@
   "license": "MIT",
   "author": "",
   "bin": {
-    "openclaw": "openclaw.mjs"
+    "openclaw": "openclaw.mjs",
+    "opencore": "openclaw.mjs"
   },
   "files": [
     "assets/",

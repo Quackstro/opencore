@@ -5,10 +5,12 @@
  * like command processing, session lifecycle, etc.
  */
 
+import type { RoutingContext, RoutingResult } from "../agents/skills/routing/types.js";
+import type { SkillEntry } from "../agents/skills/types.js";
 import type { WorkspaceBootstrapFile } from "../agents/workspace.js";
 import type { OpenClawConfig } from "../config/config.js";
 
-export type InternalHookEventType = "command" | "session" | "agent" | "gateway";
+export type InternalHookEventType = "command" | "session" | "agent" | "gateway" | "skill";
 
 export type AgentBootstrapHookContext = {
   workspaceDir: string;
@@ -23,6 +25,26 @@ export type AgentBootstrapHookEvent = InternalHookEvent & {
   type: "agent";
   action: "bootstrap";
   context: AgentBootstrapHookContext;
+};
+
+export type SkillFilterHookContext = {
+  /** All eligible skills (before routing) */
+  eligibleSkills: SkillEntry[];
+  /** Routing context (message, model, etc.) */
+  routingContext: RoutingContext;
+  /** Routing result from the classifier */
+  routingResult: RoutingResult;
+  /**
+   * Mutable array of selected skill names.
+   * Hooks can modify this to override routing decisions.
+   */
+  selectedSkills: string[];
+};
+
+export type SkillFilterHookEvent = InternalHookEvent & {
+  type: "skill";
+  action: "filter";
+  context: SkillFilterHookContext;
 };
 
 export interface InternalHookEvent {
@@ -178,4 +200,48 @@ export function isAgentBootstrapEvent(event: InternalHookEvent): event is AgentB
     return false;
   }
   return Array.isArray(context.bootstrapFiles);
+}
+
+/**
+ * Type guard for skill:filter events.
+ *
+ * @param event - The event to check
+ * @returns true if the event is a SkillFilterHookEvent
+ */
+export function isSkillFilterEvent(event: InternalHookEvent): event is SkillFilterHookEvent {
+  if (event.type !== "skill" || event.action !== "filter") {
+    return false;
+  }
+  const context = event.context as Partial<SkillFilterHookContext> | null;
+  if (!context || typeof context !== "object") {
+    return false;
+  }
+  if (!Array.isArray(context.eligibleSkills)) {
+    return false;
+  }
+  if (!context.routingContext || typeof context.routingContext !== "object") {
+    return false;
+  }
+  return Array.isArray(context.selectedSkills);
+}
+
+/**
+ * Create a skill:filter hook event.
+ *
+ * @param sessionKey - The session key
+ * @param context - The skill filter context
+ * @returns A SkillFilterHookEvent
+ */
+export function createSkillFilterHookEvent(
+  sessionKey: string,
+  context: SkillFilterHookContext,
+): SkillFilterHookEvent {
+  return {
+    type: "skill",
+    action: "filter",
+    sessionKey,
+    context,
+    timestamp: new Date(),
+    messages: [],
+  };
 }

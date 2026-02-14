@@ -419,7 +419,9 @@ export async function startGatewayServer(
     skillsRefreshTimer = setTimeout(() => {
       skillsRefreshTimer = null;
       const latest = loadConfig();
-      void refreshRemoteBinsForConnectedNodes(latest);
+      void refreshRemoteBinsForConnectedNodes(latest).catch((err) => {
+        log.warn(`failed to refresh remote bins: ${String(err)}`);
+      });
     }, skillsRefreshDelayMs);
   });
 

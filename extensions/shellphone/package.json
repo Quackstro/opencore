@@ -1,0 +1,24 @@
+{
+  "name": "@openclaw/shellphone",
+  "version": "1.0.0",
+  "description": "🐚 Voice calls from the deep - open-source STT/TTS for OpenClaw",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48",
+    "ws": "^8.19.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*",
+    "vitest": "^3.1.4"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

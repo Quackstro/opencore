@@ -532,6 +532,127 @@ export const OpenClawSchema = z
           })
           .strict()
           .optional(),
+        routing: z
+          .object({
+            mode: z
+              .union([z.literal("static"), z.literal("dynamic"), z.literal("hybrid")])
+              .optional(),
+            dynamic: z
+              .object({
+                classifier: z
+                  .union([z.literal("keywords"), z.literal("embeddings"), z.literal("llm")])
+                  .optional(),
+                maxSkills: z.number().int().min(0).optional(),
+                minConfidence: z.number().min(0).max(1).optional(),
+                respectAlwaysInclude: z.boolean().optional(),
+                cachePerSession: z.boolean().optional(),
+                llm: z
+                  .object({
+                    model: z.string().optional(),
+                    maxTokens: z.number().int().positive().optional(),
+                  })
+                  .strict()
+                  .optional(),
+                embeddings: z
+                  .object({
+                    model: z.string().optional(),
+                    cacheEmbeddings: z.boolean().optional(),
+                  })
+                  .strict()
+                  .optional(),
+                historyDepth: z.number().int().min(0).max(20).optional(),
+                domainTracking: z
+                  .object({
+                    enabled: z.boolean().optional(),
+                    decayTurns: z.number().int().min(1).max(20).optional(),
+                    boostFactor: z.number().min(1).max(3).optional(),
+                  })
+                  .strict()
+                  .optional(),
+              })
+              .strict()
+              .optional(),
+            hybrid: z
+              .object({
+                staticThreshold: z.number().int().min(0).optional(),
+                dynamicAboveThreshold: z.boolean().optional(),
+              })
+              .strict()
+              .optional(),
+            domainAliases: z.record(z.string(), z.array(z.string())).optional(),
+            // Batch 2: Skill Groups
+            skillGroups: z
+              .object({
+                enabled: z.boolean().optional(),
+                groups: z
+                  .array(
+                    z
+                      .object({
+                        id: z.string(),
+                        name: z.string(),
+                        description: z.string().optional(),
+                        skills: z.array(z.string()),
+                        domains: z.array(z.string()).optional(),
+                        activationThreshold: z.number().min(0).max(1).optional(),
+                        expandOnSelect: z.boolean().optional(),
+                      })
+                      .strict(),
+                  )
+                  .optional(),
+                autoExpand: z.boolean().optional(),
+                activateByDomain: z.boolean().optional(),
+              })
+              .strict()
+              .optional(),
+            // Batch 2: User Preferences
+            userPreferences: z
+              .object({
+                enabled: z.boolean().optional(),
+                persistPath: z.string().optional(),
+                learning: z
+                  .object({
+                    enabled: z.boolean().optional(),
+                    incrementPerUse: z.number().min(0).max(1).optional(),
+                    maxWeight: z.number().min(1).max(5).optional(),
+                    minWeight: z.number().min(0).max(1).optional(),
+                    decayPerDay: z.number().min(0).max(1).optional(),
+                    decayGracePeriodDays: z.number().int().min(0).optional(),
+                  })
+                  .strict()
+                  .optional(),
+              })
+              .strict()
+              .optional(),
+            // Batch 2: Cost-Aware Selection
+            costAware: z
+              .object({
+                enabled: z.boolean().optional(),
+                preferCheaper: z.boolean().optional(),
+                maxTier: z
+                  .union([
+                    z.literal("free"),
+                    z.literal("cheap"),
+                    z.literal("standard"),
+                    z.literal("expensive"),
+                  ])
+                  .optional(),
+                budgetPer24h: z.number().min(0).optional(),
+                costWeight: z.number().min(0).max(1).optional(),
+              })
+              .strict()
+              .optional(),
+            // Batch 2: Skill Chaining
+            chaining: z
+              .object({
+                enabled: z.boolean().optional(),
+                maxDepth: z.number().int().min(1).max(10).optional(),
+                resolveDependencies: z.boolean().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
         entries: z
           .record(
             z.string(),

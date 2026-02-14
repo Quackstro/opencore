@@ -14,6 +14,7 @@ import {
   isEmbeddedPiRunStreaming,
   resolveEmbeddedSessionLane,
 } from "../../agents/pi-embedded.js";
+import { resolveThinkingWithSkills } from "../../agents/skills/routing/thinking-resolver.js";
 import {
   resolveGroupSessionKey,
   resolveSessionFilePath,
@@ -21,6 +22,7 @@ import {
   updateSessionStore,
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { clearCommandLane, getQueueSize } from "../../process/command-queue.js";
 import { normalizeMainKey } from "../../routing/session-key.js";
 import { isReasoningTagProvider } from "../../utils/provider-utils.js";
@@ -44,6 +46,8 @@ import { routeReply } from "./route-reply.js";
 import { ensureSkillSnapshot, prependSystemEvents } from "./session-updates.js";
 import { resolveTypingMode } from "./typing-mode.js";
 import { appendUntrustedContext } from "./untrusted-context.js";
+
+const replyLogger = createSubsystemLogger("get-reply-run");
 
 type AgentDefaults = NonNullable<OpenClawConfig["agents"]>["defaults"];
 type ExecOverrides = Pick<ExecToolDefaults, "host" | "security" | "ask" | "node">;
@@ -267,6 +271,36 @@ export async function runPreparedReply(
   if (!resolvedThinkLevel) {
     resolvedThinkLevel = await modelState.resolveDefaultThinkingLevel();
   }
+
+  // Apply skill-based thinking override if skills have thinkingOverride metadata
+  const skillEntries = (skillsSnapshot as { entries?: unknown })?.entries;
+  if (
+    resolvedThinkLevel &&
+    Array.isArray(skillEntries) &&
+    skillEntries.length > 0 &&
+    !directives.hasThinkDirective // Don't override explicit user directives
+  ) {
+    const thinkingResolution = resolveThinkingWithSkills(
+      resolvedThinkLevel as Parameters<typeof resolveThinkingWithSkills>[0],
+      skillEntries,
+    );
+    if (thinkingResolution.changed) {
+      replyLogger.info("thinking-auto-override", {
+        from: resolvedThinkLevel,
+        to: thinkingResolution.level,
+        skill: thinkingResolution.skillName,
+        reason: thinkingResolution.reason,
+      });
+      resolvedThinkLevel = thinkingResolution.level;
+    }
+    if (thinkingResolution.hint) {
+      replyLogger.debug("thinking-hint", {
+        hint: thinkingResolution.hint,
+        currentLevel: resolvedThinkLevel,
+      });
+    }
+  }
+
   if (resolvedThinkLevel === "xhigh" && !supportsXHighThinking(provider, model)) {
     const explicitThink = directives.hasThinkDirective && directives.thinkLevel !== undefined;
     if (explicitThink) {

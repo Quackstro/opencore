@@ -63,6 +63,7 @@ const BASE_RELOAD_RULES: ReloadRule[] = [
 ];
 
 const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
+  { prefix: "meta", kind: "none" },
   { prefix: "identity", kind: "none" },
   { prefix: "wizard", kind: "none" },
   { prefix: "logging", kind: "none" },
@@ -74,9 +75,20 @@ const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
   { prefix: "agent", kind: "none" },
   { prefix: "routing", kind: "none" },
   { prefix: "messages", kind: "none" },
+  { prefix: "commands", kind: "none" },
+  { prefix: "approvals", kind: "none" },
   { prefix: "session", kind: "none" },
+  { prefix: "web", kind: "none" },
   { prefix: "talk", kind: "none" },
   { prefix: "skills", kind: "none" },
+  { prefix: "auth", kind: "none" },
+  { prefix: "env", kind: "none" },
+  { prefix: "diagnostics", kind: "none" },
+  { prefix: "update", kind: "none" },
+  { prefix: "nodeHost", kind: "none" },
+  { prefix: "broadcast", kind: "none" },
+  { prefix: "memory", kind: "none" },
+  { prefix: "channels", kind: "none" },
   { prefix: "plugins", kind: "restart" },
   { prefix: "ui", kind: "none" },
   { prefix: "gateway", kind: "restart" },

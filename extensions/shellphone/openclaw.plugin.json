@@ -1,0 +1,232 @@
+{
+  "$schema": "https://openclaw.ai/schemas/plugin.json",
+  "id": "shellphone",
+  "name": "Shellphone 🐚",
+  "description": "Voice calls from the deep - open-source STT (Whisper) and TTS (Piper)",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": false,
+        "description": "Enable the voice-call-open plugin"
+      },
+      "provider": {
+        "type": "string",
+        "enum": ["twilio", "mock"],
+        "default": "mock",
+        "description": "Telephony provider (twilio or mock for testing)"
+      },
+      "fromNumber": {
+        "type": "string",
+        "description": "E.164 phone number to call from"
+      },
+      "toNumber": {
+        "type": "string",
+        "description": "Default E.164 phone number to call"
+      },
+      "twilio": {
+        "type": "object",
+        "properties": {
+          "accountSid": {
+            "type": "string",
+            "description": "Twilio Account SID"
+          },
+          "authToken": {
+            "type": "string",
+            "description": "Twilio Auth Token"
+          }
+        }
+      },
+      "stt": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["whisper"],
+            "default": "whisper"
+          },
+          "whisper": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "enum": ["tiny", "base", "small", "medium", "large"],
+                "default": "base",
+                "description": "Whisper model size"
+              },
+              "device": {
+                "type": "string",
+                "enum": ["cpu", "cuda"],
+                "default": "cpu",
+                "description": "Device for inference"
+              },
+              "language": {
+                "type": "string",
+                "default": "en",
+                "description": "Language code for transcription"
+              }
+            }
+          }
+        }
+      },
+      "tts": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["piper", "edge"],
+            "default": "piper"
+          },
+          "piper": {
+            "type": "object",
+            "properties": {
+              "model": {
+                "type": "string",
+                "default": "en_US-amy-medium",
+                "description": "Piper voice model name"
+              },
+              "dataDir": {
+                "type": "string",
+                "default": "~/.openclaw/piper",
+                "description": "Directory for Piper models"
+              },
+              "speakerId": {
+                "type": "integer",
+                "description": "Speaker ID for multi-speaker models"
+              },
+              "lengthScale": {
+                "type": "number",
+                "default": 1.0,
+                "description": "Speech rate (lower = faster)"
+              }
+            }
+          },
+          "edge": {
+            "type": "object",
+            "properties": {
+              "voice": {
+                "type": "string",
+                "default": "en-US-AriaNeural",
+                "description": "Edge TTS voice name"
+              }
+            }
+          }
+        }
+      },
+      "vad": {
+        "type": "object",
+        "properties": {
+          "silenceThresholdMs": {
+            "type": "integer",
+            "default": 500,
+            "description": "Silence duration to detect end of speech"
+          },
+          "minSpeechMs": {
+            "type": "integer",
+            "default": 100,
+            "description": "Minimum speech duration to consider valid"
+          },
+          "energyThreshold": {
+            "type": "number",
+            "default": 0.01,
+            "description": "RMS energy threshold for speech detection"
+          }
+        }
+      },
+      "llm": {
+        "type": "object",
+        "properties": {
+          "systemPrompt": {
+            "type": "string",
+            "description": "System prompt for LLM responses"
+          },
+          "maxTokens": {
+            "type": "integer",
+            "default": 150,
+            "description": "Maximum tokens in LLM response"
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.7,
+            "description": "LLM temperature"
+          }
+        }
+      },
+      "serve": {
+        "type": "object",
+        "properties": {
+          "port": {
+            "type": "integer",
+            "default": 3335,
+            "description": "Webhook server port"
+          },
+          "bind": {
+            "type": "string",
+            "default": "127.0.0.1",
+            "description": "Bind address"
+          },
+          "path": {
+            "type": "string",
+            "default": "/shellphone/webhook",
+            "description": "Webhook path"
+          },
+          "streamPath": {
+            "type": "string",
+            "default": "/shellphone/stream",
+            "description": "WebSocket stream path"
+          }
+        }
+      },
+      "tunnel": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["none", "ngrok"],
+            "default": "none"
+          },
+          "ngrokAuthToken": {
+            "type": "string",
+            "description": "ngrok auth token"
+          },
+          "ngrokDomain": {
+            "type": "string",
+            "description": "ngrok custom domain"
+          }
+        }
+      },
+      "inboundPolicy": {
+        "type": "string",
+        "enum": ["disabled", "allowlist", "open"],
+        "default": "disabled",
+        "description": "Policy for inbound calls"
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": [],
+        "description": "Allowed phone numbers for inbound calls"
+      },
+      "inboundGreeting": {
+        "type": "string",
+        "default": "Hello! How can I help you today?",
+        "description": "Greeting for inbound calls"
+      },
+      "maxDurationSeconds": {
+        "type": "integer",
+        "default": 300,
+        "description": "Maximum call duration"
+      },
+      "publicUrl": {
+        "type": "string",
+        "description": "Override public URL for webhooks"
+      },
+      "store": {
+        "type": "string",
+        "description": "Path for call logs"
+      }
+    }
+  }
+}

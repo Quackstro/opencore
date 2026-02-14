@@ -1,9 +1,9 @@
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
+import { guardedAppend } from "../logging/circuit-breaker.js";
 import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 
@@ -100,22 +100,27 @@ function resolveCacheTraceConfig(params: CacheTraceInit): CacheTraceConfig {
   };
 }
 
+/** Max size for cache trace files (20 MB). */
+const MAX_CACHE_TRACE_BYTES = 20 * 1024 * 1024;
+
 function getWriter(filePath: string): CacheTraceWriter {
   const existing = writers.get(filePath);
   if (existing) {
     return existing;
   }
 
-  const dir = path.dirname(filePath);
-  const ready = fs.mkdir(dir, { recursive: true }).catch(() => undefined);
   let queue = Promise.resolve();
 
   const writer: CacheTraceWriter = {
     filePath,
     write: (line: string) => {
       queue = queue
-        .then(() => ready)
-        .then(() => fs.appendFile(filePath, line, "utf8"))
+        .then(() =>
+          guardedAppend(filePath, line, {
+            maxFileBytes: MAX_CACHE_TRACE_BYTES,
+            keepTailBytes: 2 * 1024 * 1024,
+          }),
+        )
         .catch(() => undefined);
     },
   };

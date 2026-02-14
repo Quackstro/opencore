@@ -71,11 +71,33 @@ export const BedrockDiscoverySchema = z
   .strict()
   .optional();
 
+/**
+ * Model capability override schema.
+ * Allows adding/removing capabilities from the base registry.
+ */
+const ModelCapabilityOverrideSchema = z
+  .object({
+    add: z.array(z.string()).optional(),
+    remove: z.array(z.string()).optional(),
+  })
+  .strict();
+
+/**
+ * Per-model capability definition: either a full list or an override object.
+ */
+const ModelCapabilityEntrySchema = z.union([z.array(z.string()), ModelCapabilityOverrideSchema]);
+
 export const ModelsConfigSchema = z
   .object({
     mode: z.union([z.literal("merge"), z.literal("replace")]).optional(),
     providers: z.record(z.string(), ModelProviderSchema).optional(),
     bedrockDiscovery: BedrockDiscoverySchema,
+    /**
+     * Model capability definitions for skill routing.
+     * Keys are model IDs (e.g., "anthropic/claude-opus-4").
+     * Values are either a full capability array or an override object.
+     */
+    capabilities: z.record(z.string(), ModelCapabilityEntrySchema).optional(),
   })
   .strict()
   .optional();

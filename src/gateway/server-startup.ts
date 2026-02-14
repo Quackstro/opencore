@@ -135,7 +135,9 @@ export async function startGatewaySidecars(params: {
         deps: params.deps,
         workspaceDir: params.defaultWorkspaceDir,
       });
-      void triggerInternalHook(hookEvent);
+      void triggerInternalHook(hookEvent).catch((err) => {
+        params.logHooks.error(`internal hook failed: ${String(err)}`);
+      });
     }, 250);
   }
 
@@ -152,7 +154,9 @@ export async function startGatewaySidecars(params: {
 
   if (shouldWakeFromRestartSentinel()) {
     setTimeout(() => {
-      void scheduleRestartSentinelWake({ deps: params.deps });
+      void scheduleRestartSentinelWake({ deps: params.deps }).catch((err) => {
+        params.logHooks.error(`restart sentinel wake failed: ${String(err)}`);
+      });
     }, 750);
   }
 

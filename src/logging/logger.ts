@@ -4,12 +4,13 @@ import path from "node:path";
 import { Logger as TsLogger } from "tslog";
 import type { OpenClawConfig } from "../config/types.js";
 import type { ConsoleStyle } from "./console.js";
+import { guardedAppendSync, startPeriodicPrune } from "./circuit-breaker.js";
 import { readLoggingConfig } from "./config.js";
 import { type LogLevel, levelToMinLevel, normalizeLogLevel } from "./levels.js";
 import { loggingState } from "./state.js";
 
 // Pin to /tmp so mac Debug UI and docs match; os.tmpdir() can be a per-user
-// randomized path on macOS which made the “Open log” button a no-op.
+// randomized path on macOS which made the "Open log" button a no-op.
 export const DEFAULT_LOG_DIR = "/tmp/openclaw";
 export const DEFAULT_LOG_FILE = path.join(DEFAULT_LOG_DIR, "openclaw.log"); // legacy single-file path
 
@@ -92,6 +93,8 @@ function buildLogger(settings: ResolvedSettings): TsLogger<LogObj> {
   // Clean up stale rolling logs when using a dated log filename.
   if (isRollingPath(settings.file)) {
     pruneOldRollingLogs(path.dirname(settings.file));
+    // Start periodic pruning so old logs don't accumulate across long-running processes
+    startPeriodicPrune(path.dirname(settings.file), MAX_LOG_AGE_MS);
   }
   const logger = new TsLogger<LogObj>({
     name: "openclaw",
@@ -100,13 +103,9 @@ function buildLogger(settings: ResolvedSettings): TsLogger<LogObj> {
   });
 
   logger.attachTransport((logObj: LogObj) => {
-    try {
-      const time = logObj.date?.toISOString?.() ?? new Date().toISOString();
-      const line = JSON.stringify({ ...logObj, time });
-      fs.appendFileSync(settings.file, `${line}\n`, { encoding: "utf8" });
-    } catch {
-      // never block on logging failures
-    }
+    const time = logObj.date?.toISOString?.() ?? new Date().toISOString();
+    const line = JSON.stringify({ ...logObj, time });
+    guardedAppendSync(settings.file, `${line}\n`);
   });
   for (const transport of externalTransports) {
     attachExternalTransport(logger, transport);

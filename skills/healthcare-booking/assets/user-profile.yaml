@@ -1,0 +1,35 @@
+# Patient Profile - Dr. Castro
+# Populated from Brain records
+
+patient:
+  name: "Jose G Castro"
+  date_of_birth: "1981-12-13"
+  phone: "678-575-3122"
+  email: "castro770@gmail.com"
+  
+  location:
+    city: "Riverview"
+    state: "FL"
+    zip_codes:
+      - "33569"
+      - "33578"
+      - "33579"
+    search_radius_miles: 15
+
+insurance:
+  carrier: "Aetna"
+  plan_name: "Open Choice PPO"
+  plan_type: "PPO"
+  member_id: "W172639058"
+  group_number: "0863775-010-00003"
+  member_services: "1-866-658-2455"
+  claims_address: |
+    AETNA
+    PO BOX 981106
+    EL PASO, TX 79998-1106
+
+current_needs:
+  - specialty: "Orthopedic Surgery"
+    reason: "Knee pain"
+    urgency: "routine"
+    date_reported: "2026-02-13"

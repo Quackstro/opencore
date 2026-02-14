@@ -10,6 +10,7 @@ import { resolveAgentTimeoutMs } from "../../agents/timeout.js";
 import { dispatchInboundMessage } from "../../auto-reply/dispatch.js";
 import { createReplyDispatcher } from "../../auto-reply/reply/reply-dispatcher.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
+import { guardedAppendSync } from "../../logging/circuit-breaker.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import {
@@ -132,11 +133,10 @@ function appendAssistantTranscriptMessage(params: {
     message: messageBody,
   };
 
-  try {
-    fs.appendFileSync(transcriptPath, `${JSON.stringify(transcriptEntry)}\n`, "utf-8");
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
+  guardedAppendSync(transcriptPath, `${JSON.stringify(transcriptEntry)}\n`, {
+    maxFileBytes: 200 * 1024 * 1024, // 200 MB per transcript
+    keepTailBytes: 50 * 1024 * 1024, // keep last 50 MB on rotation
+  });
 
   return { ok: true, messageId, message: transcriptEntry.message };
 }
@@ -671,18 +671,11 @@ export const chatHandlers: GatewayRequestHandlers = {
       message: messageBody,
     };
 
-    // Append to transcript file
-    try {
-      fs.appendFileSync(transcriptPath, `${JSON.stringify(transcriptEntry)}\n`, "utf-8");
-    } catch (err) {
-      const errMessage = err instanceof Error ? err.message : String(err);
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.UNAVAILABLE, `failed to write transcript: ${errMessage}`),
-      );
-      return;
-    }
+    // Append to transcript file (circuit-breaker guarded)
+    guardedAppendSync(transcriptPath, `${JSON.stringify(transcriptEntry)}\n`, {
+      maxFileBytes: 200 * 1024 * 1024,
+      keepTailBytes: 50 * 1024 * 1024,
+    });
 
     // Broadcast to webchat for immediate UI update
     const chatPayload = {

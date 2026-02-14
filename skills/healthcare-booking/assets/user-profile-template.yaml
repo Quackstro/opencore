@@ -1,0 +1,46 @@
+# Healthcare Booking User Profile Template
+# Copy and fill in for each user
+
+patient:
+  name: ""                    # Full legal name as on insurance
+  dob: ""                     # YYYY-MM-DD format
+  phone: ""                   # Primary contact number
+  email: ""                   # For confirmations
+  address:
+    street: ""
+    city: ""
+    state: ""
+    zip: ""
+
+insurance:
+  carrier: ""                 # e.g., "Aetna", "UnitedHealthcare"
+  plan_type: ""               # PPO, HMO, EPO, POS
+  member_id: ""               # From insurance card
+  group_number: ""            # From insurance card
+  subscriber_name: ""         # If different from patient
+  subscriber_dob: ""          # If different from patient
+  insurance_phone: ""         # Customer service number on card
+
+pcp:                          # Primary Care Physician (for referrals)
+  name: ""
+  practice: ""
+  phone: ""
+  fax: ""
+
+preferences:
+  max_distance_miles: 25
+  preferred_days:
+    - Monday
+    - Tuesday
+    - Wednesday
+    - Thursday
+    - Friday
+  preferred_times: "any"      # morning, afternoon, evening, any
+  telehealth_ok: false
+  parking_required: true
+
+medical_history:              # Brief notes for context
+  conditions: []
+  current_medications: []
+  allergies: []
+  recent_surgeries: []
