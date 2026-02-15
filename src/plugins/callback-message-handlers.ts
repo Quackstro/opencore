@@ -7,9 +7,7 @@
  */
 
 import type {
-  PluginCallbackHandlerContext,
   PluginCallbackHandlerDef,
-  PluginCallbackHandlerResult,
   PluginMessageHandlerContext,
   PluginMessageHandlerDef,
   PluginMessageHandlerResult,
