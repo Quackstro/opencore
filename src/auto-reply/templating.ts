@@ -119,6 +119,10 @@ export type MsgContext = {
   CommandAuthorized?: boolean;
   CommandSource?: "text" | "native";
   CommandTargetSessionKey?: string;
+  /** Provider-native chat/channel ID (e.g. Telegram chat id). Used by plugin command handlers. */
+  ChatId?: string;
+  /** Provider-native message ID. Used by plugin command handlers for message deletion etc. */
+  MessageId?: string;
   /** Gateway client scopes when the message originates from the gateway. */
   GatewayClientScopes?: string[];
   /** Thread identifier (Telegram topic id or Matrix thread event id). */
