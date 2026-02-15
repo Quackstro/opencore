@@ -684,6 +684,9 @@ export const registerTelegramNativeCommands = ({
             isAuthorizedSender: commandAuthorized,
             commandBody,
             config: cfg,
+            chatId: String(chatId),
+            messageId: String(msg.message_id),
+            accountId,
           });
           const tableMode = resolveMarkdownTableMode({
             cfg,

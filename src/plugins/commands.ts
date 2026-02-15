@@ -51,6 +51,9 @@ const RESERVED_COMMANDS = new Set([
   // Agent control
   "skill",
   "subagents",
+  "kill",
+  "steer",
+  "tell",
   "model",
   "models",
   "queue",
@@ -229,9 +232,16 @@ export async function executePluginCommand(params: {
   args?: string;
   senderId?: string;
   channel: string;
+  channelId?: PluginCommandContext["channelId"];
   isAuthorizedSender: boolean;
   commandBody: string;
   config: OpenClawConfig;
+  from?: PluginCommandContext["from"];
+  to?: PluginCommandContext["to"];
+  accountId?: PluginCommandContext["accountId"];
+  messageThreadId?: PluginCommandContext["messageThreadId"];
+  chatId?: PluginCommandContext["chatId"];
+  messageId?: PluginCommandContext["messageId"];
 }): Promise<PluginCommandResult> {
   const { command, args, senderId, channel, isAuthorizedSender, commandBody, config } = params;
 
@@ -250,10 +260,17 @@ export async function executePluginCommand(params: {
   const ctx: PluginCommandContext = {
     senderId,
     channel,
+    channelId: params.channelId,
     isAuthorizedSender,
     args: sanitizedArgs,
     commandBody,
     config,
+    from: params.from,
+    to: params.to,
+    accountId: params.accountId,
+    messageThreadId: params.messageThreadId,
+    chatId: params.chatId,
+    messageId: params.messageId,
   };
 
   // Lock registry during execution to prevent concurrent modifications
