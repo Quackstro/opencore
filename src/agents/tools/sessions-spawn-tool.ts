@@ -6,11 +6,7 @@ import { formatThinkingLevels, normalizeThinkLevel } from "../../auto-reply/thin
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import {
-  isSubagentSessionKey,
-  normalizeAgentId,
-  parseAgentSessionKey,
-} from "../../routing/session-key.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { normalizeDeliveryContext } from "../../utils/delivery-context.js";
 import { resolveAgentConfig } from "../agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
@@ -185,7 +181,7 @@ export function createSessionsSpawnTool(opts?: {
         cfg,
         agentId: targetAgentId,
       });
-      const resolvedModel =
+      let resolvedModel =
         normalizeModelSelection(modelOverride) ??
         normalizeModelSelection(targetAgentConfig?.subagents?.model) ??
         normalizeModelSelection(cfg.agents?.defaults?.subagents?.model) ??

@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
+// Skills status functionality is available but not used in this file
 import {
   routeSkillsSync,
   getCanonicalDomains,
