@@ -1,5 +1,6 @@
 import type { CronJobCreate, CronJobPatch } from "./types.js";
 import { sanitizeAgentId } from "../routing/session-key.js";
+import { isRecord } from "../utils.js";
 import { parseAbsoluteTimeMs } from "./parse.js";
 import { migrateLegacyCronPayload } from "./payload-migration.js";
 import { inferLegacyName } from "./service/normalize.js";
@@ -13,10 +14,6 @@ type NormalizeOptions = {
 const DEFAULT_OPTIONS: NormalizeOptions = {
   applyDefaults: false,
 };
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function coerceSchedule(schedule: UnknownRecord) {
   const next: UnknownRecord = { ...schedule };
@@ -77,10 +74,18 @@ function coercePayload(payload: UnknownRecord) {
   if (!next.kind) {
     const hasMessage = typeof next.message === "string" && next.message.trim().length > 0;
     const hasText = typeof next.text === "string" && next.text.trim().length > 0;
+    const hasAgentTurnHint =
+      typeof next.model === "string" ||
+      typeof next.thinking === "string" ||
+      typeof next.timeoutSeconds === "number" ||
+      typeof next.allowUnsafeExternalContent === "boolean";
     if (hasMessage) {
       next.kind = "agentTurn";
     } else if (hasText) {
       next.kind = "systemEvent";
+    } else if (hasAgentTurnHint) {
+      // Accept partial agentTurn payload patches that only tweak agent-turn-only fields.
+      next.kind = "agentTurn";
     }
   }
   if (typeof next.message === "string") {

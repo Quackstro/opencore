@@ -16,13 +16,13 @@ import {
 } from "../hooks/internal-hooks.js";
 import { loadInternalHooks } from "../hooks/loader.js";
 import { isTruthyEnvValue } from "../infra/env.js";
-import { type LogMonitorHandle, startLogMonitor } from "../infra/log-monitor.js";
 import { type PluginServicesHandle, startPluginServices } from "../plugins/services.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import {
   scheduleRestartSentinelWake,
   shouldWakeFromRestartSentinel,
 } from "./server-restart-sentinel.js";
+import { startGatewayMemoryBackend } from "./server-startup-memory.js";
 
 export async function startGatewaySidecars(params: {
   cfg: ReturnType<typeof loadConfig>;
@@ -38,9 +38,6 @@ export async function startGatewaySidecars(params: {
   };
   logChannels: { info: (msg: string) => void; error: (msg: string) => void };
   logBrowser: { error: (msg: string) => void };
-  logLogMonitor: { info: (msg: string) => void; warn: (msg: string) => void };
-  logFile?: string;
-  sessionKey?: string;
 }) {
   // Start OpenClaw browser control server (unless disabled via config).
   let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
@@ -139,9 +136,7 @@ export async function startGatewaySidecars(params: {
         deps: params.deps,
         workspaceDir: params.defaultWorkspaceDir,
       });
-      void triggerInternalHook(hookEvent).catch((err) => {
-        params.logHooks.error(`internal hook failed: ${String(err)}`);
-      });
+      void triggerInternalHook(hookEvent);
     }, 250);
   }
 
@@ -156,25 +151,15 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`plugin services failed to start: ${String(err)}`);
   }
 
-  // Start log monitor if configured.
-  let logMonitor: LogMonitorHandle | null = null;
-  try {
-    logMonitor = startLogMonitor(params.cfg.logMonitor ?? {}, {
-      logFile: params.logFile,
-      sessionKey: params.sessionKey,
-      logger: params.logLogMonitor,
-    });
-  } catch (err) {
-    params.logLogMonitor.warn(`log monitor failed to start: ${String(err)}`);
-  }
+  void startGatewayMemoryBackend({ cfg: params.cfg, log: params.log }).catch((err) => {
+    params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
+  });
 
   if (shouldWakeFromRestartSentinel()) {
     setTimeout(() => {
-      void scheduleRestartSentinelWake({ deps: params.deps }).catch((err) => {
-        params.logHooks.error(`restart sentinel wake failed: ${String(err)}`);
-      });
+      void scheduleRestartSentinelWake({ deps: params.deps });
     }, 750);
   }
 
-  return { browserControl, pluginServices, logMonitor };
+  return { browserControl, pluginServices };
 }
