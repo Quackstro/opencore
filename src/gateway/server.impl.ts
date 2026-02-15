@@ -253,6 +253,8 @@ export async function startGatewayServer(
     services: [],
     commands: [],
     diagnostics: [],
+    callbackHandlers: [],
+    messageHandlers: [],
   };
   const { pluginRegistry, gatewayMethods: baseGatewayMethods } = minimalTestGateway
     ? { pluginRegistry: emptyPluginRegistry, gatewayMethods: baseMethods }

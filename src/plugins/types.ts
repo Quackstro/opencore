@@ -278,12 +278,66 @@ export type OpenClawPluginApi = {
    */
   registerCommand: (command: OpenClawPluginCommandDefinition) => void;
   resolvePath: (input: string) => string;
+  /** Register a handler for callback_query data matching a regex pattern (e.g., inline buttons). */
+  registerCallbackHandler: (def: PluginCallbackHandlerDef) => void;
+  /** Register a handler for raw text messages matching a regex pattern, checked before the LLM agent. */
+  registerMessageHandler: (def: PluginMessageHandlerDef) => void;
   /** Register a lifecycle hook handler */
   on: <K extends PluginHookName>(
     hookName: K,
     handler: PluginHookHandlerMap[K],
     opts?: { priority?: number },
   ) => void;
+};
+
+// ---------------------------------------------------------------------------
+// Callback & Message Handler types (for plugin-registered inline buttons, etc.)
+// ---------------------------------------------------------------------------
+
+export type PluginCallbackHandlerContext = {
+  chatId: string;
+  callbackData: string;
+  message?: unknown;
+  messageId?: string;
+  accountId?: string;
+  data?: string;
+  chat?: { id: string | number };
+  text?: string;
+};
+
+export type PluginCallbackHandlerResult = {
+  text: string;
+  parseMode?: string;
+  keyboard?: unknown;
+} | null;
+
+export type PluginCallbackHandlerDef = {
+  pattern: RegExp;
+  handler: (ctx: PluginCallbackHandlerContext) => Promise<PluginCallbackHandlerResult>;
+};
+
+export type PluginMessageHandlerContext = {
+  chatId: string;
+  text: string;
+  messageId?: string;
+  accountId?: string;
+  message?: unknown;
+  callbackData?: string;
+  data?: string;
+  chat?: { id: string | number };
+};
+
+export type PluginMessageHandlerResult = {
+  text: string;
+  parseMode?: string;
+  keyboard?: unknown;
+  deleteMessageId?: string;
+} | null;
+
+export type PluginMessageHandlerDef = {
+  pattern: RegExp;
+  priority: number;
+  handler: (ctx: PluginMessageHandlerContext) => Promise<PluginMessageHandlerResult>;
 };
 
 export type PluginOrigin = "bundled" | "global" | "workspace" | "config";

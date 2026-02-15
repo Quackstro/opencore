@@ -20,6 +20,8 @@ export const createTestRegistry = (channels: PluginRegistry["channels"] = []): P
   services: [],
   commands: [],
   diagnostics: [],
+  callbackHandlers: [],
+  messageHandlers: [],
 });
 
 export const createOutboundTestPlugin = (params: {

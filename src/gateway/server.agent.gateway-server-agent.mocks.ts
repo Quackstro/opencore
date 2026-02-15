@@ -17,6 +17,8 @@ export const registryState: { registry: PluginRegistry } = {
     services: [],
     commands: [],
     diagnostics: [],
+    callbackHandlers: [],
+    messageHandlers: [],
   } as PluginRegistry,
 };
 

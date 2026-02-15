@@ -28,9 +28,15 @@ import type {
   PluginHookName,
   PluginHookHandlerMap,
   PluginHookRegistration as TypedPluginHookRegistration,
+  PluginCallbackHandlerDef,
+  PluginMessageHandlerDef,
 } from "./types.js";
 import { registerInternalHook } from "../hooks/internal-hooks.js";
 import { resolveUserPath } from "../utils.js";
+import {
+  registerCallbackHandler as registerCallbackHandlerGlobal,
+  registerMessageHandler as registerMessageHandlerGlobal,
+} from "./callback-message-handlers.js";
 import { registerPluginCommand } from "./commands.js";
 import { normalizePluginHttpPath } from "./http-path.js";
 
@@ -121,6 +127,16 @@ export type PluginRecord = {
   configJsonSchema?: Record<string, unknown>;
 };
 
+export type PluginCallbackHandlerRegistration = {
+  pluginId: string;
+  def: PluginCallbackHandlerDef;
+};
+
+export type PluginMessageHandlerRegistration = {
+  pluginId: string;
+  def: PluginMessageHandlerDef;
+};
+
 export type PluginRegistry = {
   plugins: PluginRecord[];
   tools: PluginToolRegistration[];
@@ -134,6 +150,8 @@ export type PluginRegistry = {
   cliRegistrars: PluginCliRegistration[];
   services: PluginServiceRegistration[];
   commands: PluginCommandRegistration[];
+  callbackHandlers: PluginCallbackHandlerRegistration[];
+  messageHandlers: PluginMessageHandlerRegistration[];
   diagnostics: PluginDiagnostic[];
 };
 
@@ -157,6 +175,8 @@ export function createEmptyPluginRegistry(): PluginRegistry {
     cliRegistrars: [],
     services: [],
     commands: [],
+    callbackHandlers: [],
+    messageHandlers: [],
     diagnostics: [],
   };
 }
@@ -446,6 +466,16 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
     });
   };
 
+  const registerCallbackHandler = (record: PluginRecord, def: PluginCallbackHandlerDef) => {
+    registry.callbackHandlers.push({ pluginId: record.id, def });
+    registerCallbackHandlerGlobal(record.id, def);
+  };
+
+  const registerMessageHandler = (record: PluginRecord, def: PluginMessageHandlerDef) => {
+    registry.messageHandlers.push({ pluginId: record.id, def });
+    registerMessageHandlerGlobal(record.id, def);
+  };
+
   const registerTypedHook = <K extends PluginHookName>(
     record: PluginRecord,
     hookName: K,
@@ -497,6 +527,8 @@ export function createPluginRegistry(registryParams: PluginRegistryParams) {
       registerCli: (registrar, opts) => registerCli(record, registrar, opts),
       registerService: (service) => registerService(record, service),
       registerCommand: (command) => registerCommand(record, command),
+      registerCallbackHandler: (def) => registerCallbackHandler(record, def),
+      registerMessageHandler: (def) => registerMessageHandler(record, def),
       resolvePath: (input: string) => resolveUserPath(input),
       on: (hookName, handler, opts) => registerTypedHook(record, hookName, handler, opts),
     };

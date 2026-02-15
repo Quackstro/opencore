@@ -18,6 +18,7 @@ import { writeConfigFile } from "../config/io.js";
 import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
 import { danger, logVerbose, warn } from "../globals.js";
 import { readChannelAllowFromStore } from "../pairing/pairing-store.js";
+import { findCallbackHandler, runMessageHandlers } from "../plugins/callback-message-handlers.js";
 import { resolveAgentRoute } from "../routing/resolve-route.js";
 import { resolveThreadSessionKeys } from "../routing/session-key.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
@@ -581,7 +582,7 @@ export const registerTelegramHandlers = ({
             totalPages,
             pageSize,
           });
-          const text = `Models (${provider}) — ${models.length} available`;
+          const text = `Models (${provider}) - ${models.length} available`;
           await editMessageWithButtons(text, buttons);
           return;
         }
@@ -612,6 +613,51 @@ export const registerTelegramHandlers = ({
         }
 
         return;
+      }
+
+      // Plugin callback handlers (e.g., wallet inline buttons)
+      const pluginCbHandler = findCallbackHandler(data);
+      if (pluginCbHandler) {
+        try {
+          const pluginResult = await pluginCbHandler.handler({
+            chatId: String(chatId),
+            callbackData: data,
+            data,
+            message: callbackMessage,
+            messageId: String(callbackMessage.message_id),
+            accountId,
+            chat: { id: chatId },
+          });
+          if (pluginResult) {
+            const replyOpts: Record<string, unknown> = {};
+            if (pluginResult.parseMode) {
+              replyOpts.parse_mode = pluginResult.parseMode;
+            }
+            if (pluginResult.keyboard) {
+              replyOpts.reply_markup =
+                typeof pluginResult.keyboard === "object" && pluginResult.keyboard != null
+                  ? pluginResult.keyboard
+                  : undefined;
+            }
+            try {
+              await bot.api.editMessageText(
+                chatId,
+                callbackMessage.message_id,
+                pluginResult.text,
+                replyOpts,
+              );
+            } catch (editErr) {
+              const errStr = String(editErr);
+              if (!errStr.includes("message is not modified")) {
+                // editMessageText failed - fall back to sendMessage
+                await bot.api.sendMessage(chatId, pluginResult.text, replyOpts);
+              }
+            }
+          }
+          return;
+        } catch (pluginErr) {
+          runtime.error?.(danger(`plugin callback handler failed: ${String(pluginErr)}`));
+        }
       }
 
       const syntheticMessage: Message = {
@@ -792,8 +838,47 @@ export const registerTelegramHandlers = ({
         }
       }
 
+      // Plugin message handlers (e.g., wallet onboarding passphrase input)
+      // Checked before LLM dispatch; first non-null result wins.
+      {
+        const rawText = (msg.text ?? msg.caption ?? "").trim();
+        if (rawText) {
+          try {
+            const pluginMsgResult = await runMessageHandlers({
+              chatId: String(chatId),
+              text: rawText,
+              messageId: String(msg.message_id),
+              accountId,
+              message: msg,
+              chat: { id: chatId },
+            });
+            if (pluginMsgResult) {
+              const replyOpts: Record<string, unknown> = {};
+              if (pluginMsgResult.parseMode) {
+                replyOpts.parse_mode = pluginMsgResult.parseMode;
+              }
+              if (pluginMsgResult.keyboard) {
+                replyOpts.reply_markup = pluginMsgResult.keyboard;
+              }
+              // Delete user message if requested (e.g., passphrase security)
+              if (pluginMsgResult.deleteMessageId) {
+                bot.api.deleteMessage(chatId, msg.message_id).catch(() => {});
+              }
+              await withTelegramApiErrorLogging({
+                operation: "sendMessage",
+                runtime,
+                fn: () => bot.api.sendMessage(chatId, pluginMsgResult.text, replyOpts),
+              });
+              return;
+            }
+          } catch (pluginMsgErr) {
+            runtime.error?.(danger(`plugin message handler failed: ${String(pluginMsgErr)}`));
+          }
+        }
+      }
+
       // Text fragment handling - Telegram splits long pastes into multiple inbound messages (~4096 chars).
-      // We buffer “near-limit” messages and append immediately-following parts.
+      // We buffer "near-limit" messages and append immediately-following parts.
       const text = typeof msg.text === "string" ? msg.text : undefined;
       const isCommandLike = (text ?? "").trim().startsWith("/");
       if (text && !isCommandLike) {
