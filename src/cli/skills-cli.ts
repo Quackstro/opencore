@@ -1,16 +1,10 @@
 import type { Command } from "commander";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
-import {
-  buildWorkspaceSkillStatus,
-  type SkillStatusEntry,
-  type SkillStatusReport,
-} from "../agents/skills-status.js";
+import { buildWorkspaceSkillStatus } from "../agents/skills-status.js";
 import {
   routeSkillsSync,
-  detectDomainsFromMessage,
   getCanonicalDomains,
   type RoutingContext,
-  type RoutingResult,
 } from "../agents/skills/routing/index.js";
 import {
   loadWorkspaceSkillEntries,

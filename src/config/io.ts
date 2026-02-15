@@ -777,6 +777,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
                       applySessionDefaults(
                         applyLoggingDefaults(applyMessageDefaults(validated.config)),
                       ),
+                    ),
                   ),
                 ),
               ),

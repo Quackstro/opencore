@@ -181,15 +181,11 @@ export function createSessionsSpawnTool(opts?: {
       const childDepth = callerDepth + 1;
       const spawnedByKey = requesterInternalKey;
       const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
-<<<<<<< HEAD
-      let resolvedModel =
-=======
       const runtimeDefaultModel = resolveDefaultModelForAgent({
         cfg,
         agentId: targetAgentId,
       });
       const resolvedModel =
->>>>>>> upstream/main
         normalizeModelSelection(modelOverride) ??
         normalizeModelSelection(targetAgentConfig?.subagents?.model) ??
         normalizeModelSelection(cfg.agents?.defaults?.subagents?.model) ??
