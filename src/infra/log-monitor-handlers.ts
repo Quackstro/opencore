@@ -7,7 +7,6 @@
 
 import type { IssueCategory } from "./log-monitor-registry.js";
 import { runCrashRecoveryCheck } from "./crash-recovery.js";
-import { isTransientNetworkError } from "./unhandled-rejections.js";
 
 // ============================================================================
 // Types

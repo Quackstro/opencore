@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { BUILTIN_HANDLERS, runHandlers } from "./log-monitor-handlers.js";
+import { runHandlers } from "./log-monitor-handlers.js";
 import { createIssueRegistry } from "./log-monitor-registry.js";
 import { classifyLogLine } from "./log-monitor.js";
 
