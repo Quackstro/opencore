@@ -19,6 +19,7 @@ import {
   writeConfigFile,
 } from "../config/config.js";
 import { applyPluginAutoEnable } from "../config/plugin-auto-enable.js";
+import { resolveMainSessionKeyFromConfig } from "../config/sessions.js";
 import { clearAgentRunContext, onAgentEvent } from "../infra/agent-events.js";
 import {
   ensureControlUiAssetsBuilt,
@@ -39,6 +40,7 @@ import {
   setSkillsRemoteRegistry,
 } from "../infra/skills-remote.js";
 import { scheduleGatewayUpdateCheck } from "../infra/update-startup.js";
+import { getResolvedLoggerSettings } from "../logging.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
@@ -561,6 +563,8 @@ export async function startGatewayServer(
     logChannels,
     logBrowser,
     logLogMonitor,
+    logFile: getResolvedLoggerSettings().file,
+    sessionKey: resolveMainSessionKeyFromConfig(),
   }));
 
   const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers({
