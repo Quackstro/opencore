@@ -132,7 +132,7 @@ if (isMain) {
     }
 
     // Non-fatal: log and continue
-    // Self-healing system will pick this up from logs
+    // Log monitor (logMonitor.enabled) detects these from the structured log below
     console.warn(
       "[openclaw] Suppressed non-fatal exception (continuing):",
       formatUncaughtError(error),

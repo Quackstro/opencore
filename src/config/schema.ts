@@ -61,6 +61,7 @@ const GROUP_LABELS: Record<string, string> = {
   commands: "Commands",
   session: "Session",
   cron: "Cron",
+  logMonitor: "Log Monitor",
   hooks: "Hooks",
   ui: "UI",
   browser: "Browser",
@@ -88,6 +89,7 @@ const GROUP_ORDER: Record<string, number> = {
   commands: 85,
   session: 90,
   cron: 100,
+  logMonitor: 105,
   hooks: 110,
   ui: 120,
   browser: 130,
@@ -378,6 +380,13 @@ const FIELD_LABELS: Record<string, string> = {
   "agents.list[].skills": "Agent Skill Filter",
   "agents.list[].identity.avatar": "Agent Avatar",
   "discovery.mdns.mode": "mDNS Discovery Mode",
+  "logMonitor.enabled": "Log Monitor Enabled",
+  "logMonitor.intervalMs": "Log Monitor Scan Interval (ms)",
+  "logMonitor.maxLinesPerScan": "Log Monitor Max Lines Per Scan",
+  "logMonitor.dedupeWindowMs": "Log Monitor Dedupe Window (ms)",
+  "logMonitor.minOccurrences": "Log Monitor Min Occurrences",
+  "logMonitor.autoResolve": "Log Monitor Auto-Resolve",
+  "logMonitor.crashRecovery": "Log Monitor Crash Recovery",
   "plugins.enabled": "Enable Plugins",
   "plugins.allow": "Plugin Allowlist",
   "plugins.deny": "Plugin Denylist",
@@ -629,6 +638,17 @@ const FIELD_HELP: Record<string, string> = {
     "Minimum appended bytes before session transcripts trigger reindex (default: 100000).",
   "agents.defaults.memorySearch.sync.sessions.deltaMessages":
     "Minimum appended JSONL lines before session transcripts trigger reindex (default: 50).",
+  "logMonitor.enabled":
+    "Enable the background log monitor for automatic issue detection and self-healing (default: false).",
+  "logMonitor.intervalMs": "How often the log monitor scans for new issues (ms, default: 60000).",
+  "logMonitor.maxLinesPerScan": "Maximum log lines to read per scan cycle (default: 500).",
+  "logMonitor.dedupeWindowMs":
+    "Time window for deduplicating surfaced issues (ms, default: 1800000 = 30 min).",
+  "logMonitor.minOccurrences":
+    "Minimum occurrences of an issue before surfacing to the user (default: 2).",
+  "logMonitor.autoResolve":
+    "Allow the log monitor to auto-resolve known issue patterns (default: true).",
+  "logMonitor.crashRecovery": "Run crash recovery analysis on gateway startup (default: true).",
   "plugins.enabled": "Enable plugin/extension loading (default: true).",
   "plugins.allow": "Optional allowlist of plugin ids; when set, only listed plugins load.",
   "plugins.deny": "Optional denylist of plugin ids; deny wins over allowlist.",

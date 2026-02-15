@@ -295,6 +295,18 @@ export const OpenClawSchema = z
       })
       .strict()
       .optional(),
+    logMonitor: z
+      .object({
+        enabled: z.boolean().optional(),
+        intervalMs: z.number().int().positive().optional(),
+        maxLinesPerScan: z.number().int().positive().optional(),
+        dedupeWindowMs: z.number().int().nonnegative().optional(),
+        minOccurrences: z.number().int().positive().optional(),
+        autoResolve: z.boolean().optional(),
+        crashRecovery: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
     hooks: z
       .object({
         enabled: z.boolean().optional(),

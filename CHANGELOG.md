@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Added
 
+- Log monitor: add self-healing background agent that tails logs, detects recurring issues, and auto-resolves known patterns. Enable with `logMonitor.enabled: true`.
 - Gateway: add `agents.create`, `agents.update`, `agents.delete` RPC methods for web UI agent management. (#11045) Thanks @advaitpaliwal.
 
 ### Fixes

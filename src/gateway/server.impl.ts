@@ -90,6 +90,7 @@ const logChannels = log.child("channels");
 const logBrowser = log.child("browser");
 const logHealth = log.child("health");
 const logCron = log.child("cron");
+const logLogMonitor = log.child("log-monitor");
 const logReload = log.child("reload");
 const logHooks = log.child("hooks");
 const logPlugins = log.child("plugins");
@@ -548,7 +549,8 @@ export async function startGatewayServer(
   });
 
   let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
-  ({ browserControl, pluginServices } = await startGatewaySidecars({
+  let logMonitor: Awaited<ReturnType<typeof startGatewaySidecars>>["logMonitor"] = null;
+  ({ browserControl, pluginServices, logMonitor } = await startGatewaySidecars({
     cfg: cfgAtStart,
     pluginRegistry,
     defaultWorkspaceDir,
@@ -558,6 +560,7 @@ export async function startGatewayServer(
     logHooks,
     logChannels,
     logBrowser,
+    logLogMonitor,
   }));
 
   const { applyHotReload, requestGatewayRestart } = createGatewayReloadHandlers({
@@ -634,6 +637,7 @@ export async function startGatewayServer(
         skillsRefreshTimer = null;
       }
       skillsChangeUnsub();
+      logMonitor?.stop();
       await close(opts);
     },
   };

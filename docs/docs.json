@@ -986,7 +986,8 @@
                   "automation/webhook",
                   "automation/gmail-pubsub",
                   "automation/poll",
-                  "automation/auth-monitoring"
+                  "automation/auth-monitoring",
+                  "automation/log-monitor"
                 ]
               },
               {
@@ -1495,7 +1496,8 @@
                   "zh-CN/automation/webhook",
                   "zh-CN/automation/gmail-pubsub",
                   "zh-CN/automation/poll",
-                  "zh-CN/automation/auth-monitoring"
+                  "zh-CN/automation/auth-monitoring",
+                  "zh-CN/automation/log-monitor"
                 ]
               },
               {
