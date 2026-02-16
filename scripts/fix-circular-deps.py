@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Patch circular __exportAll imports in bundled dist output.
+"""Patch bundler output issues in dist/.
 
-tsdown/rollup sometimes creates circular chunks where __exportAll (a bundler helper)
-is imported from a chunk that itself imports from the chunk defining __exportAll.
-This causes a TDZ error at module evaluation time in Node.js.
+1. Circular __exportAll imports: tsdown/rollup sometimes creates circular chunks
+   where __exportAll is imported from a chunk that itself imports back. Node.js
+   hits a TDZ error. Fix: inline the helper in affected files.
 
-Fix: inline the __exportAll helper in affected files.
+2. Reserved word 'in' used as import alias for __exportAll in plugin-sdk chunks.
+   Node.js can't resolve the live binding due to circular deps. Fix: inline the
+   helper in those files too.
 """
-import glob, sys
+import glob, re, sys
 
 INLINE = '''var __defProp = Object.defineProperty;
 var __exportAll = (all, no_symbols) => {
@@ -25,20 +27,36 @@ var __exportAll = (all, no_symbols) => {
 };
 '''
 
-# Find the pattern: import { XX as __exportAll } from "./subagent-registry-HASH.js";
-import re
-PATTERN = re.compile(r'import \{ \w+ as __exportAll \} from "\./subagent-registry-[^"]+\.js";\n')
+# ---------------------------------------------------------------------------
+# Fix 1: Inline __exportAll imported from subagent-registry circular chunks
+# ---------------------------------------------------------------------------
+CIRCULAR_PATTERN = re.compile(r'import \{ \w+ as __exportAll \} from "\./subagent-registry-[^"]+\.js";\n')
 
-count = 0
-for f in glob.glob('dist/*.js'):
+count1 = 0
+for f in glob.glob('dist/**/*.js', recursive=True):
     with open(f, 'r') as fh:
         content = fh.read()
-    new_content = PATTERN.sub(INLINE, content)
+    new_content = CIRCULAR_PATTERN.sub(INLINE, content)
     if new_content != content:
         with open(f, 'w') as fh:
             fh.write(new_content)
-        count += 1
+        count1 += 1
 
-print(f"Patched {count} files with inlined __exportAll")
-if count == 0:
-    print("No circular __exportAll imports found (may already be fixed)")
+print(f"[1/2] Patched {count1} files with inlined __exportAll (subagent-registry)")
+
+# ---------------------------------------------------------------------------
+# Fix 2: Inline __exportAll imported as reserved word 'in' from reply chunks
+# ---------------------------------------------------------------------------
+RESERVED_PATTERN = re.compile(r'import \{ in as __exportAll \} from "\./reply-[^"]+\.js";\n')
+
+count2 = 0
+for f in glob.glob('dist/**/*.js', recursive=True):
+    with open(f, 'r') as fh:
+        content = fh.read()
+    new_content = RESERVED_PATTERN.sub(INLINE, content)
+    if new_content != content:
+        with open(f, 'w') as fh:
+            fh.write(new_content)
+        count2 += 1
+
+print(f"[2/2] Patched {count2} files with inlined __exportAll (reply/in)")

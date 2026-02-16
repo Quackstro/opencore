@@ -4,6 +4,9 @@
  * Manages callback_query handlers and message handlers registered by plugins.
  * Callback handlers match inline button data; message handlers intercept text
  * messages before the LLM agent.
+ *
+ * Uses Symbol.for() globals so the gateway runtime and plugin-sdk runtime
+ * share the same arrays even when the bundler splits them into separate chunks.
  */
 
 import type {
@@ -14,14 +17,25 @@ import type {
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
-// Storage
+// Storage — global singletons via Symbol.for to survive chunk splitting
 // ---------------------------------------------------------------------------
 
 type RegisteredCallbackHandler = PluginCallbackHandlerDef & { pluginId: string };
 type RegisteredMessageHandler = PluginMessageHandlerDef & { pluginId: string };
 
-const callbackHandlers: RegisteredCallbackHandler[] = [];
-const messageHandlers: RegisteredMessageHandler[] = [];
+const CB_KEY = Symbol.for("openclaw.callbackHandlers");
+const MH_KEY = Symbol.for("openclaw.messageHandlers");
+
+const g = globalThis as Record<symbol, unknown>;
+if (!g[CB_KEY]) {
+  g[CB_KEY] = [];
+}
+if (!g[MH_KEY]) {
+  g[MH_KEY] = [];
+}
+
+const callbackHandlers = g[CB_KEY] as RegisteredCallbackHandler[];
+const messageHandlers = g[MH_KEY] as RegisteredMessageHandler[];
 
 // ---------------------------------------------------------------------------
 // Registration (called from registry.ts during plugin load)

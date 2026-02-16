@@ -633,11 +633,11 @@ export const registerTelegramHandlers = ({
             if (pluginResult.parseMode) {
               replyOpts.parse_mode = pluginResult.parseMode;
             }
-            if (pluginResult.keyboard) {
-              replyOpts.reply_markup =
-                typeof pluginResult.keyboard === "object" && pluginResult.keyboard != null
-                  ? pluginResult.keyboard
-                  : undefined;
+            // Support both direct keyboard and channelData.telegram.buttons patterns
+            const pluginChannelData = (pluginResult as any)?.channelData?.telegram;
+            const buttons = pluginResult.keyboard ?? pluginChannelData?.buttons;
+            if (buttons) {
+              replyOpts.reply_markup = buildInlineKeyboard(buttons);
             }
             try {
               await bot.api.editMessageText(
@@ -857,8 +857,11 @@ export const registerTelegramHandlers = ({
               if (pluginMsgResult.parseMode) {
                 replyOpts.parse_mode = pluginMsgResult.parseMode;
               }
-              if (pluginMsgResult.keyboard) {
-                replyOpts.reply_markup = pluginMsgResult.keyboard;
+              const msgButtons =
+                pluginMsgResult.keyboard ??
+                (pluginMsgResult as any)?.channelData?.telegram?.buttons;
+              if (msgButtons) {
+                replyOpts.reply_markup = buildInlineKeyboard(msgButtons);
               }
               // Delete user message if requested (e.g., passphrase security)
               if (pluginMsgResult.deleteMessageId) {

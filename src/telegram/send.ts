@@ -55,7 +55,7 @@ type TelegramSendOpts = {
   /** Forum topic thread ID (for forum supergroups) */
   messageThreadId?: number;
   /** Inline keyboard buttons (reply markup). */
-  buttons?: Array<Array<{ text: string; callback_data: string }>>;
+  buttons?: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
 };
 
 type TelegramSendResult = {
@@ -216,13 +216,13 @@ export function buildInlineKeyboard(
   const rows = buttons
     .map((row) =>
       row
-        .filter((button) => button?.text && button?.callback_data)
-        .map(
-          (button): InlineKeyboardButton => ({
-            text: button.text,
-            callback_data: button.callback_data,
-          }),
-        ),
+        .filter((button) => button?.text && (button?.callback_data || button?.url))
+        .map((button): InlineKeyboardButton => {
+          if (button.url) {
+            return { text: button.text, url: button.url };
+          }
+          return { text: button.text, callback_data: button.callback_data! };
+        }),
     )
     .filter((row) => row.length > 0);
   if (rows.length === 0) {
@@ -703,7 +703,7 @@ type TelegramEditOpts = {
   /** Controls whether link previews are shown in the edited message. */
   linkPreview?: boolean;
   /** Inline keyboard buttons (reply markup). Pass empty array to remove buttons. */
-  buttons?: Array<Array<{ text: string; callback_data: string }>>;
+  buttons?: Array<Array<{ text: string; callback_data?: string; url?: string }>>;
   /** Optional config injection to avoid global loadConfig() (improves testability). */
   cfg?: ReturnType<typeof loadConfig>;
 };
