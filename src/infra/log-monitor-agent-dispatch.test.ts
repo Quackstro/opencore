@@ -1,9 +1,8 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import type { AgentDispatchConfig } from "../config/types.log-monitor.js";
 import {
   buildHealingAgentPrompt,
   canSpawnAgent,
-  getActiveAgentCount,
   isHealingAgentSession,
   resetAgentDispatchState,
 } from "./log-monitor-agent-dispatch.js";
