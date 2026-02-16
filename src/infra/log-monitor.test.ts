@@ -223,12 +223,15 @@ describe("runHandlers", () => {
     expect(result!.result).toBe("needs-human");
   });
 
-  test("returns null when no handler matches", async () => {
+  test("GenericError catches unknown category issues", async () => {
     const result = await runHandlers(
       { signature: "unknown:1", category: "unknown", message: "???", occurrences: 1 },
       {},
     );
-    expect(result).toBeNull();
+    // GenericError is the catch-all handler for error/unknown categories
+    expect(result).not.toBeNull();
+    expect(result!.handler).toBe("GenericError");
+    expect(result!.result).toBe("fixed"); // low occurrence → suppressed
   });
 });
 

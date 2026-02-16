@@ -9,11 +9,12 @@
  */
 
 import fs from "node:fs";
-import type { LogMonitorConfig } from "../config/types.log-monitor.js";
+import type { AgentDispatchConfig, LogMonitorConfig } from "../config/types.log-monitor.js";
 import { runCrashRecoveryCheck } from "./crash-recovery.js";
 import { emitDiagnosticEvent } from "./diagnostic-events.js";
+import { dispatchHealingAgent } from "./log-monitor-agent-dispatch.js";
 import { startDiagnosticCollector } from "./log-monitor-diagnostics.js";
-import { runHandlers, type HandlerContext } from "./log-monitor-handlers.js";
+import { normalizeResolution, runHandlers, type HandlerContext } from "./log-monitor-handlers.js";
 import {
   createIssueRegistry,
   type IssueCategory,
@@ -25,6 +26,16 @@ import { enqueueSystemEvent } from "./system-events.js";
 // Defaults
 // ============================================================================
 
+const DEFAULT_AGENT_DISPATCH: AgentDispatchConfig = {
+  enabled: false,
+  timeoutSeconds: 300,
+  thinking: "high",
+  maxConcurrent: 2,
+  cooldownSeconds: 3600,
+  maxSpawnsPerHour: 5,
+  agentId: "system",
+};
+
 const DEFAULTS: Required<LogMonitorConfig> = {
   enabled: false,
   intervalMs: 60_000,
@@ -33,6 +44,7 @@ const DEFAULTS: Required<LogMonitorConfig> = {
   minOccurrences: 2,
   autoResolve: true,
   crashRecovery: true,
+  agentDispatch: DEFAULT_AGENT_DISPATCH,
 };
 
 // ============================================================================
@@ -243,6 +255,9 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
     });
   }
 
+  // Main config (mutable for updateConfig)
+  let currentConfig = merged;
+
   // Start diagnostic event collector to capture real-time events
   const stopDiagnostics = startDiagnosticCollector((issue) => {
     const decision = registry.record(issue);
@@ -250,12 +265,9 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
       surfaceIssue(issue.signature, issue.message, deps);
     }
     if (decision.shouldAutoResolve) {
-      void resolveIssue(issue, registry, handlerCtx, deps);
+      void resolveIssue(issue, registry, handlerCtx, deps, currentConfig.agentDispatch);
     }
   });
-
-  // Main scan loop
-  let currentConfig = merged;
 
   function tick() {
     if (!deps.logFile) {
@@ -291,7 +303,7 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
         surfaceIssue(issue.signature, issue.message, deps);
       }
       if (decision.shouldAutoResolve) {
-        void resolveIssue(issue, registry, handlerCtx, deps);
+        void resolveIssue(issue, registry, handlerCtx, deps, currentConfig.agentDispatch);
       }
     }
 
@@ -322,6 +334,31 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
 // Helpers
 // ============================================================================
 
+/**
+ * Read recent log lines from the log file (for agent context).
+ */
+function getRecentLogLines(deps: LogMonitorDeps, count: number): string[] {
+  if (!deps.logFile) {
+    return [];
+  }
+  try {
+    const stat = fs.statSync(deps.logFile);
+    const estimatedBytes = count * 500;
+    const start = Math.max(0, stat.size - estimatedBytes);
+    const buffer = Buffer.alloc(Math.min(estimatedBytes, stat.size));
+    const fd = fs.openSync(deps.logFile, "r");
+    try {
+      fs.readSync(fd, buffer, 0, buffer.length, start);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const lines = buffer.toString("utf8").split("\n");
+    return lines.slice(-count);
+  } catch {
+    return [];
+  }
+}
+
 function surfaceIssue(signature: string, message: string, deps: LogMonitorDeps): void {
   if (!deps.sessionKey) {
     return;
@@ -336,15 +373,43 @@ async function resolveIssue(
   registry: IssueRegistry,
   ctx: HandlerContext,
   deps: LogMonitorDeps,
+  agentDispatchConfig?: AgentDispatchConfig,
 ): Promise<void> {
   registry.markAutoResolveAttempt(issue.signature);
 
   const result = await runHandlers({ ...issue, occurrences: 0 }, ctx);
 
   if (result) {
+    const resolution = normalizeResolution(result.resolution);
     deps.logger?.info?.(
       `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result}`,
     );
+
+    if (resolution.result === "needs-agent") {
+      const config = { ...DEFAULT_AGENT_DISPATCH, ...agentDispatchConfig };
+      if (config.enabled) {
+        const recentLines = getRecentLogLines(deps, 50);
+        const dispatchResult = await dispatchHealingAgent({
+          issue: { ...issue, occurrences: 0 },
+          recentLogLines: recentLines,
+          agentContext: resolution.agentContext,
+          config,
+          registry,
+          deps,
+        });
+        if (dispatchResult.dispatched) {
+          return;
+        }
+        // If dispatch was blocked, fall through to user escalation
+        deps.logger?.info?.(
+          `log-monitor: agent dispatch blocked (${dispatchResult.reason}), escalating to user`,
+        );
+      }
+      // Agent dispatch disabled or blocked — escalate to user
+      surfaceIssue(issue.signature, `${issue.message} (auto-resolve: needs manual review)`, deps);
+      return;
+    }
+
     if (result.result === "needs-human") {
       surfaceIssue(issue.signature, `${issue.message} (auto-resolve: needs manual review)`, deps);
     }

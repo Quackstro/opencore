@@ -26,6 +26,12 @@ export interface IssueRecord {
   lastSurfacedMs: number;
   autoResolveAttempts: number;
   lastAutoResolveMs: number;
+  /** Number of consecutive agent dispatch failures for circuit breaker. */
+  agentFailures: number;
+  /** Timestamp of the last agent failure. */
+  lastAgentFailureMs: number;
+  /** Timestamp of the last agent dispatch. */
+  lastAgentDispatchMs: number;
 }
 
 export interface IssueDecision {
@@ -61,6 +67,14 @@ export interface IssueRegistry {
   setCursor(cursor: number): void;
   /** Mark an issue as having had an auto-resolve attempt. */
   markAutoResolveAttempt(signature: string): void;
+  /** Mark an agent dispatch for an issue. */
+  markAgentDispatch(signature: string): void;
+  /** Mark an agent failure for an issue (increments circuit breaker counter). */
+  markAgentFailure(signature: string): void;
+  /** Reset agent failure counter (on success). */
+  resetAgentFailures(signature: string): void;
+  /** Get the issue record for a signature. */
+  getIssue(signature: string): IssueRecord | undefined;
   /** Persist state to disk. */
   flush(): void;
   /** Load state from disk. */
@@ -99,6 +113,9 @@ export function createIssueRegistry(config: IssueRegistryConfig): IssueRegistry 
         lastSurfacedMs: 0,
         autoResolveAttempts: 0,
         lastAutoResolveMs: 0,
+        agentFailures: 0,
+        lastAgentFailureMs: 0,
+        lastAgentDispatchMs: 0,
       });
     }
 
@@ -130,6 +147,33 @@ export function createIssueRegistry(config: IssueRegistryConfig): IssueRegistry 
     }
   }
 
+  function markAgentDispatch(signature: string): void {
+    const issue = issues.get(signature);
+    if (issue) {
+      issue.lastAgentDispatchMs = Date.now();
+    }
+  }
+
+  function markAgentFailure(signature: string): void {
+    const issue = issues.get(signature);
+    if (issue) {
+      issue.agentFailures += 1;
+      issue.lastAgentFailureMs = Date.now();
+    }
+  }
+
+  function resetAgentFailures(signature: string): void {
+    const issue = issues.get(signature);
+    if (issue) {
+      issue.agentFailures = 0;
+      issue.lastAgentFailureMs = 0;
+    }
+  }
+
+  function getIssue(signature: string): IssueRecord | undefined {
+    return issues.get(signature);
+  }
+
   function flush(): void {
     const state: RegistryState = {
       cursor,
@@ -149,7 +193,7 @@ export function createIssueRegistry(config: IssueRegistryConfig): IssueRegistry 
     if (raw.issues && typeof raw.issues === "object") {
       for (const [sig, record] of Object.entries(raw.issues)) {
         if (record && typeof record === "object" && typeof record.signature === "string") {
-          issues.set(sig, record as IssueRecord);
+          issues.set(sig, record);
         }
       }
     }
@@ -167,6 +211,10 @@ export function createIssueRegistry(config: IssueRegistryConfig): IssueRegistry 
       cursor = c;
     },
     markAutoResolveAttempt,
+    markAgentDispatch,
+    markAgentFailure,
+    resetAgentFailures,
+    getIssue,
     flush,
     load,
     reset,

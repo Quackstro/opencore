@@ -12,7 +12,20 @@ import { runCrashRecoveryCheck } from "./crash-recovery.js";
 // Types
 // ============================================================================
 
-export type HandlerResult = "fixed" | "failed" | "needs-human";
+export type HandlerResult = "fixed" | "failed" | "needs-human" | "needs-agent";
+
+export interface AgentContext {
+  task: string;
+  tools?: string[];
+  severity?: "low" | "medium" | "high";
+  timeoutSeconds?: number;
+}
+
+export interface HandlerResolution {
+  result: HandlerResult;
+  /** When result === "needs-agent", optional context for the agent */
+  agentContext?: AgentContext;
+}
 
 export interface LogMonitorIssue {
   signature: string;
@@ -28,7 +41,22 @@ export interface HandlerContext {
 export interface LogMonitorHandler {
   name: string;
   matches(issue: LogMonitorIssue): boolean;
-  resolve(issue: LogMonitorIssue, ctx: HandlerContext): Promise<HandlerResult>;
+  resolve(issue: LogMonitorIssue, ctx: HandlerContext): Promise<HandlerResult | HandlerResolution>;
+}
+
+// ============================================================================
+// Normalization
+// ============================================================================
+
+/**
+ * Normalize a handler return value to a HandlerResolution object.
+ * Supports both plain string results and full resolution objects.
+ */
+export function normalizeResolution(result: HandlerResult | HandlerResolution): HandlerResolution {
+  if (typeof result === "string") {
+    return { result };
+  }
+  return result;
 }
 
 // ============================================================================
@@ -90,7 +118,37 @@ const TransientNetworkHandler: LogMonitorHandler = {
 };
 
 /**
+ * Handles OAuth/token refresh failures by dispatching a healing agent.
+ */
+const OAuthTokenHandler: LogMonitorHandler = {
+  name: "OAuthToken",
+
+  matches(issue) {
+    return (
+      issue.message.includes("token") &&
+      (issue.message.includes("expired") ||
+        issue.message.includes("refresh") ||
+        issue.message.includes("401") ||
+        issue.message.includes("unauthorized"))
+    );
+  },
+
+  async resolve(issue, _ctx): Promise<HandlerResolution> {
+    return {
+      result: "needs-agent",
+      agentContext: {
+        task: `OAuth/token error detected: ${issue.message}. Check token files, attempt refresh, verify credentials config.`,
+        tools: ["check_config", "clear_token_cache", "inspect_logs"],
+        severity: "medium",
+        timeoutSeconds: 120,
+      },
+    };
+  },
+};
+
+/**
  * Delegates to the existing crash recovery module for crash-pattern issues.
+ * Returns "needs-agent" to let the dispatch system manage the agent lifecycle.
  */
 const CrashRecoveryHandler: LogMonitorHandler = {
   name: "CrashRecovery",
@@ -99,20 +157,38 @@ const CrashRecoveryHandler: LogMonitorHandler = {
     return issue.category === "crash";
   },
 
-  async resolve(issue, ctx) {
+  async resolve(issue, ctx): Promise<HandlerResolution> {
+    // Try the quick crash recovery check first
     try {
       const result = await runCrashRecoveryCheck({}, { logger: ctx.logger });
       if (result.diagnosisSpawned) {
         ctx.logger?.info?.("log-monitor: crash recovery spawned diagnosis agent");
-        return "fixed";
+        return { result: "fixed" };
       }
       if (result.clusters > 0) {
-        return "needs-human";
+        // Clusters detected — dispatch a healing agent for deeper diagnosis
+        return {
+          result: "needs-agent",
+          agentContext: {
+            task: `OpenCore crash detected: ${issue.message}. Diagnose root cause, find relevant source files, and implement a fix.`,
+            tools: ["read_source", "exec_build", "inspect_logs", "restart_service"],
+            severity: "high",
+            timeoutSeconds: 900,
+          },
+        };
       }
-      return "fixed";
+      return { result: "fixed" };
     } catch (err) {
       ctx.logger?.warn?.(`log-monitor: crash recovery failed: ${String(err)}`);
-      return "failed";
+      return {
+        result: "needs-agent",
+        agentContext: {
+          task: `OpenCore crash detected and crash recovery module failed: ${issue.message}. Diagnose and fix.`,
+          tools: ["read_source", "exec_build", "inspect_logs", "restart_service"],
+          severity: "high",
+          timeoutSeconds: 900,
+        },
+      };
     }
   },
 };
@@ -135,6 +211,33 @@ const StuckSessionHandler: LogMonitorHandler = {
   },
 };
 
+/**
+ * Catch-all handler for unhandled errors. Dispatches a healing agent
+ * when occurrences are high enough to warrant investigation.
+ * Must be last in the handler list.
+ */
+const GenericErrorHandler: LogMonitorHandler = {
+  name: "GenericError",
+
+  matches(issue) {
+    return issue.category === "error" || issue.category === "unknown";
+  },
+
+  async resolve(issue, _ctx): Promise<HandlerResolution> {
+    if (issue.occurrences >= 5) {
+      return {
+        result: "needs-agent",
+        agentContext: {
+          task: `Diagnose and fix recurring error: ${issue.message}`,
+          severity: "medium",
+        },
+      };
+    }
+    // Low occurrence — suppress
+    return { result: "fixed" };
+  },
+};
+
 // ============================================================================
 // Exports
 // ============================================================================
@@ -142,26 +245,29 @@ const StuckSessionHandler: LogMonitorHandler = {
 /** Default set of built-in handlers, tried in order. */
 export const BUILTIN_HANDLERS: LogMonitorHandler[] = [
   TransientNetworkHandler,
+  OAuthTokenHandler,
   CrashRecoveryHandler,
   StuckSessionHandler,
+  GenericErrorHandler,
 ];
 
 /**
  * Run the first matching handler for an issue.
- * @returns The handler result, or null if no handler matched.
+ * @returns The handler result (normalized to HandlerResolution), or null if no handler matched.
  */
 export async function runHandlers(
   issue: LogMonitorIssue,
   ctx: HandlerContext,
   handlers: LogMonitorHandler[] = BUILTIN_HANDLERS,
-): Promise<{ handler: string; result: HandlerResult } | null> {
+): Promise<{ handler: string; result: HandlerResult; resolution: HandlerResolution } | null> {
   for (const handler of handlers) {
     if (handler.matches(issue)) {
       try {
-        const result = await handler.resolve(issue, ctx);
-        return { handler: handler.name, result };
+        const raw = await handler.resolve(issue, ctx);
+        const resolution = normalizeResolution(raw);
+        return { handler: handler.name, result: resolution.result, resolution };
       } catch {
-        return { handler: handler.name, result: "failed" };
+        return { handler: handler.name, result: "failed", resolution: { result: "failed" } };
       }
     }
   }

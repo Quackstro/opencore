@@ -74,7 +74,15 @@ the next log scan.
     "dedupeWindowMs": 1800000,
     "minOccurrences": 2,
     "autoResolve": true,
-    "crashRecovery": true
+    "crashRecovery": true,
+    "agentDispatch": {
+      "enabled": true,
+      "timeoutSeconds": 300,
+      "model": "anthropic/claude-sonnet-4",
+      "thinking": "high",
+      "maxConcurrent": 2,
+      "maxSpawnsPerHour": 5
+    }
   }
 }
 ```
@@ -88,20 +96,74 @@ the next log scan.
 | `minOccurrences`  | number  | `2`       | Min hits before surfacing       |
 | `autoResolve`     | boolean | `true`    | Enable auto-resolution handlers |
 | `crashRecovery`   | boolean | `true`    | Run crash recovery on startup   |
+| `agentDispatch`   | object  | see below | Agent dispatch config           |
+
+### Agent Dispatch Config (`agentDispatch`)
+
+| Field              | Type    | Default    | Description                                   |
+| ------------------ | ------- | ---------- | --------------------------------------------- |
+| `enabled`          | boolean | `false`    | Enable healing agent dispatch                 |
+| `timeoutSeconds`   | number  | `300`      | Agent timeout before escalation               |
+| `model`            | string  | inherited  | Model for healing agents                      |
+| `thinking`         | string  | `"high"`   | Thinking level for healing agents             |
+| `maxConcurrent`    | number  | `2`        | Max concurrent healing agents                 |
+| `cooldownSeconds`  | number  | `3600`     | Min seconds between spawns for same signature |
+| `maxSpawnsPerHour` | number  | `5`        | Max total agent spawns per hour               |
+| `agentId`          | string  | `"system"` | Agent ID for healing sessions                 |
 
 ## Built-in Handlers
 
 When `autoResolve` is enabled, the monitor tries to resolve known patterns
 automatically before surfacing them:
 
-| Handler              | Matches                                | Action                                                         |
-| -------------------- | -------------------------------------- | -------------------------------------------------------------- |
-| **TransientNetwork** | ECONNRESET, ETIMEDOUT, ENOTFOUND, etc. | Suppresses unless frequency spikes (>10)                       |
-| **CrashRecovery**    | Uncaught exceptions, crash patterns    | Delegates to crash recovery module (may spawn diagnosis agent) |
-| **StuckSession**     | `session.stuck` diagnostic events      | Surfaces for manual review                                     |
+| Handler              | Matches                                | Action                                                                  |
+| -------------------- | -------------------------------------- | ----------------------------------------------------------------------- |
+| **TransientNetwork** | ECONNRESET, ETIMEDOUT, ENOTFOUND, etc. | Suppresses unless frequency spikes (>10)                                |
+| **OAuthToken**       | Token expired/refresh/401 errors       | Dispatches healing agent to check tokens and config                     |
+| **CrashRecovery**    | Uncaught exceptions, crash patterns    | Delegates to crash recovery; dispatches healing agent if clusters found |
+| **StuckSession**     | `session.stuck` diagnostic events      | Surfaces for manual review                                              |
+| **GenericError**     | Catch-all for error/unknown categories | Dispatches healing agent when occurrences ≥ 5                           |
 
 Handlers are tried in order; the first match wins. If a handler returns
-`"needs-human"`, the issue is surfaced to the user with a note.
+`"needs-human"`, the issue is surfaced to the user. If it returns
+`"needs-agent"`, the agent dispatch system is consulted (see below).
+
+## Agent Dispatch (Self-Healing Tier 2)
+
+When a handler returns `"needs-agent"`, the log monitor can spawn a
+healing sub-agent to diagnose and fix the issue autonomously. This adds
+an intermediate tier between auto-fix and user escalation:
+
+```
+Issue detected → Tier 1: Auto-fix (handlers) → Tier 2: Agent dispatch → Tier 3: User
+```
+
+### How It Works
+
+1. Handler returns `"needs-agent"` with optional context (task description,
+   severity, suggested tools, timeout)
+2. Rate limiter checks: max concurrent agents, per-issue cooldown, hourly
+   rate limit, circuit breaker
+3. If allowed, a healing agent is spawned via `callGateway({ method: "agent" })`
+4. The agent receives the error context, recent log lines, and remediation
+   instructions
+5. An escalation timer starts — if the agent doesn't complete in time, the
+   issue is escalated to the user
+
+### Safety Guardrails
+
+- **Rate limiting**: Max 2 concurrent agents, 5 spawns per hour (configurable)
+- **Cooldown**: Same issue can't trigger a new agent for 1 hour after dispatch
+- **Circuit breaker**: After 3 consecutive failures for the same issue within
+  6 hours, agent dispatch is disabled and the issue is permanently escalated
+- **Restricted tools**: Healing agents cannot send messages, modify wallet/brain
+  data, or install packages
+
+### Enabling
+
+```bash
+openclaw config set logMonitor.agentDispatch.enabled true
+```
 
 ## State & Storage
 
