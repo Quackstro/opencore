@@ -410,7 +410,7 @@ async function dispatchHealingAgentInternal(
     const { AGENT_LANE_HEALING } = await import("../agents/lanes.js");
     const { registerSubagentRun } = await import("../agents/subagent-registry.js");
 
-    await callGateway({
+    const response = await callGateway<{ runId?: string }>({
       method: "agent",
       params: {
         message: prompt,
@@ -427,10 +427,14 @@ async function dispatchHealingAgentInternal(
       timeoutMs: 10_000,
     });
 
+    // Gateway may assign a different runId — use it for tracking
+    const effectiveRunId =
+      typeof response?.runId === "string" && response.runId ? response.runId : runId;
+
     // Register in subagent registry — route completion back to whoever triggered
     const requesterSessionKey = deps.sessionKey ?? "system:log-monitor";
     registerSubagentRun({
-      runId,
+      runId: effectiveRunId,
       childSessionKey,
       requesterSessionKey,
       requesterDisplayKey:
@@ -443,8 +447,14 @@ async function dispatchHealingAgentInternal(
     });
 
     // Track in active agents
-    const timer = startEscalationTimer(runId, issue, timeoutSeconds * 1000, registry, deps);
-    activeAgents.set(runId, {
+    const timer = startEscalationTimer(
+      effectiveRunId,
+      issue,
+      timeoutSeconds * 1000,
+      registry,
+      deps,
+    );
+    activeAgents.set(effectiveRunId, {
       issueSignature: issue.signature,
       severity: agentContext?.severity ?? "medium",
       startedAt: Date.now(),
@@ -455,9 +465,11 @@ async function dispatchHealingAgentInternal(
     spawnHistory.push(Date.now());
     registry.markAgentDispatch(issue.signature);
 
-    deps.logger?.info?.(`log-monitor: dispatched healing agent ${runId} for ${issue.signature}`);
+    deps.logger?.info?.(
+      `log-monitor: dispatched healing agent ${effectiveRunId} for ${issue.signature}`,
+    );
 
-    return { dispatched: true, runId, childSessionKey };
+    return { dispatched: true, runId: effectiveRunId, childSessionKey };
   } catch (err) {
     deps.logger?.warn?.(
       `log-monitor: failed to dispatch healing agent for ${issue.signature}: ${String(err)}`,
