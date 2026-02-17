@@ -418,17 +418,19 @@ async function dispatchHealingAgentInternal(
         thinking: config.thinking ?? "high",
         timeout: timeoutSeconds,
         label: `healing:${issue.signature.slice(0, 40)}`,
-        spawnedBy: "system:log-monitor",
+        spawnedBy: deps.sessionKey ?? "system:log-monitor",
       },
       timeoutMs: 10_000,
     });
 
-    // Register in subagent registry
+    // Register in subagent registry — route completion back to whoever triggered
+    const requesterSessionKey = deps.sessionKey ?? "system:log-monitor";
     registerSubagentRun({
       runId,
       childSessionKey,
-      requesterSessionKey: "system:log-monitor",
-      requesterDisplayKey: "Log Monitor",
+      requesterSessionKey,
+      requesterDisplayKey:
+        requesterSessionKey === "system:log-monitor" ? "Log Monitor" : "Healing Gate",
       task: agentContext?.task ?? `Heal: ${issue.message}`,
       cleanup: "delete",
       label: `healing:${issue.signature.slice(0, 40)}`,
