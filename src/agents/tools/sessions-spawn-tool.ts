@@ -1,5 +1,4 @@
 import { Type } from "@sinclair/typebox";
-import crypto from "node:crypto";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { AnyAgentTool } from "./common.js";
 import { formatThinkingLevels, normalizeThinkLevel } from "../../auto-reply/thinking.js";
@@ -20,12 +19,8 @@ import {
 import { buildSubagentSystemPrompt } from "../subagent-announce.js";
 import { getSubagentDepthFromSessionStore } from "../subagent-depth.js";
 import { countActiveRunsForSession, registerSubagentRun } from "../subagent-registry.js";
+import { spawnSubagentDirect } from "../subagent-spawn.js";
 import { jsonResult, readStringParam } from "./common.js";
-import {
-  resolveDisplaySessionKey,
-  resolveInternalSessionKey,
-  resolveMainSessionAlias,
-} from "./sessions-helpers.js";
 
 const spawnLogger = createSubsystemLogger("sessions-spawn");
 
@@ -36,38 +31,10 @@ const SessionsSpawnToolSchema = Type.Object({
   model: Type.Optional(Type.String()),
   thinking: Type.Optional(Type.String()),
   runTimeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+  // Back-compat: older callers used timeoutSeconds for this tool.
+  timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
   cleanup: optionalStringEnum(["delete", "keep"] as const),
 });
-
-function splitModelRef(ref?: string) {
-  if (!ref) {
-    return { provider: undefined, model: undefined };
-  }
-  const trimmed = ref.trim();
-  if (!trimmed) {
-    return { provider: undefined, model: undefined };
-  }
-  const [provider, model] = trimmed.split("/", 2);
-  if (model) {
-    return { provider, model };
-  }
-  return { provider: undefined, model: trimmed };
-}
-
-function normalizeModelSelection(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || undefined;
-  }
-  if (!value || typeof value !== "object") {
-    return undefined;
-  }
-  const primary = (value as { primary?: unknown }).primary;
-  if (typeof primary === "string" && primary.trim()) {
-    return primary.trim();
-  }
-  return undefined;
-}
 
 export function createSessionsSpawnTool(opts?: {
   agentSessionKey?: string;
@@ -97,57 +64,39 @@ export function createSessionsSpawnTool(opts?: {
       const thinkingOverrideRaw = readStringParam(params, "thinking");
       const cleanup =
         params.cleanup === "keep" || params.cleanup === "delete" ? params.cleanup : "keep";
-      const requesterOrigin = normalizeDeliveryContext({
-        channel: opts?.agentChannel,
-        accountId: opts?.agentAccountId,
-        to: opts?.agentTo,
-        threadId: opts?.agentThreadId,
-      });
-      // Default to 0 (no timeout) when omitted. Sub-agent runs are long-lived
-      // by default and should not inherit the main agent 600s timeout.
+      // Back-compat: older callers used timeoutSeconds for this tool.
+      const timeoutSecondsCandidate =
+        typeof params.runTimeoutSeconds === "number"
+          ? params.runTimeoutSeconds
+          : typeof params.timeoutSeconds === "number"
+            ? params.timeoutSeconds
+            : undefined;
       const runTimeoutSeconds =
-        typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
-          ? Math.max(0, Math.floor(params.runTimeoutSeconds))
-          : 0;
-      let modelWarning: string | undefined;
-      let modelApplied = false;
+        typeof timeoutSecondsCandidate === "number" && Number.isFinite(timeoutSecondsCandidate)
+          ? Math.max(0, Math.floor(timeoutSecondsCandidate))
+          : undefined;
 
-      const cfg = loadConfig();
-      const { mainKey, alias } = resolveMainSessionAlias(cfg);
-      const requesterSessionKey = opts?.agentSessionKey;
-      const requesterInternalKey = requesterSessionKey
-        ? resolveInternalSessionKey({
-            key: requesterSessionKey,
-            alias,
-            mainKey,
-          })
-        : alias;
-      const requesterDisplayKey = resolveDisplaySessionKey({
-        key: requesterInternalKey,
-        alias,
-        mainKey,
-      });
-
-      const callerDepth = getSubagentDepthFromSessionStore(requesterInternalKey, { cfg });
-      const maxSpawnDepth = cfg.agents?.defaults?.subagents?.maxSpawnDepth ?? 1;
-      if (callerDepth >= maxSpawnDepth) {
-        return jsonResult({
-          status: "forbidden",
-          error: `sessions_spawn is not allowed at this depth (current depth: ${callerDepth}, max: ${maxSpawnDepth})`,
-        });
-      }
-
-      const maxChildren = cfg.agents?.defaults?.subagents?.maxChildrenPerAgent ?? 5;
-      const activeChildren = countActiveRunsForSession(requesterInternalKey);
-      if (activeChildren >= maxChildren) {
-        return jsonResult({
-          status: "forbidden",
-          error: `sessions_spawn has reached max active children for this session (${activeChildren}/${maxChildren})`,
-        });
-      }
-
-      const requesterAgentId = normalizeAgentId(
-        opts?.requesterAgentIdOverride ?? parseAgentSessionKey(requesterInternalKey)?.agentId,
+      const result = await spawnSubagentDirect(
+        {
+          task,
+          label: label || undefined,
+          agentId: requestedAgentId,
+          model: modelOverride,
+          thinking: thinkingOverrideRaw,
+          runTimeoutSeconds,
+          cleanup,
+        },
+        {
+          agentSessionKey: opts?.agentSessionKey,
+          agentChannel: opts?.agentChannel,
+          agentAccountId: opts?.agentAccountId,
+          agentTo: opts?.agentTo,
+          agentThreadId: opts?.agentThreadId,
+          agentGroupId: opts?.agentGroupId,
+          agentGroupChannel: opts?.agentGroupChannel,
+          agentGroupSpace: opts?.agentGroupSpace,
+          requesterAgentIdOverride: opts?.requesterAgentIdOverride,
+        },
       );
       const targetAgentId = requestedAgentId
         ? normalizeAgentId(requestedAgentId)
@@ -380,6 +329,8 @@ export function createSessionsSpawnTool(opts?: {
         skillAutoSelected: skillAutoSelected || undefined,
         warning: modelWarning,
       });
+
+      return jsonResult(result);
     },
   };
 }

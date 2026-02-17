@@ -1,13 +1,13 @@
-import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
-import type { Api, Model } from "@mariozechner/pi-ai";
 import crypto from "node:crypto";
 import path from "node:path";
+import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
+import type { Api, Model } from "@mariozechner/pi-ai";
 import { resolveStateDir } from "../config/paths.js";
-import { guardedAppend } from "../logging/circuit-breaker.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 import { safeJsonStringify } from "../utils/safe-json.js";
+import { getQueuedFileWriter, type QueuedFileWriter } from "./queued-file-writer.js";
 
 type PayloadLogStage = "request" | "usage";
 
@@ -32,10 +32,7 @@ type PayloadLogConfig = {
   filePath: string;
 };
 
-type PayloadLogWriter = {
-  filePath: string;
-  write: (line: string) => void;
-};
+type PayloadLogWriter = QueuedFileWriter;
 
 const writers = new Map<string, PayloadLogWriter>();
 const log = createSubsystemLogger("agent/anthropic-payload");
@@ -49,33 +46,8 @@ function resolvePayloadLogConfig(env: NodeJS.ProcessEnv): PayloadLogConfig {
   return { enabled, filePath };
 }
 
-/** Max size for payload log files (20 MB). */
-const MAX_PAYLOAD_LOG_BYTES = 20 * 1024 * 1024;
-
 function getWriter(filePath: string): PayloadLogWriter {
-  const existing = writers.get(filePath);
-  if (existing) {
-    return existing;
-  }
-
-  let queue = Promise.resolve();
-
-  const writer: PayloadLogWriter = {
-    filePath,
-    write: (line: string) => {
-      queue = queue
-        .then(() =>
-          guardedAppend(filePath, line, {
-            maxFileBytes: MAX_PAYLOAD_LOG_BYTES,
-            keepTailBytes: 2 * 1024 * 1024,
-          }),
-        )
-        .catch(() => undefined);
-    },
-  };
-
-  writers.set(filePath, writer);
-  return writer;
+  return getQueuedFileWriter(writers, filePath);
 }
 
 function formatError(error: unknown): string | undefined {

@@ -1,12 +1,12 @@
-import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import crypto from "node:crypto";
 import path from "node:path";
+import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
-import { guardedAppend } from "../logging/circuit-breaker.js";
 import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 import { safeJsonStringify } from "../utils/safe-json.js";
+import { getQueuedFileWriter, type QueuedFileWriter } from "./queued-file-writer.js";
 
 export type CacheTraceStage =
   | "session:loaded"
@@ -70,10 +70,7 @@ type CacheTraceConfig = {
   includeSystem: boolean;
 };
 
-type CacheTraceWriter = {
-  filePath: string;
-  write: (line: string) => void;
-};
+type CacheTraceWriter = QueuedFileWriter;
 
 const writers = new Map<string, CacheTraceWriter>();
 
@@ -101,33 +98,8 @@ function resolveCacheTraceConfig(params: CacheTraceInit): CacheTraceConfig {
   };
 }
 
-/** Max size for cache trace files (20 MB). */
-const MAX_CACHE_TRACE_BYTES = 20 * 1024 * 1024;
-
 function getWriter(filePath: string): CacheTraceWriter {
-  const existing = writers.get(filePath);
-  if (existing) {
-    return existing;
-  }
-
-  let queue = Promise.resolve();
-
-  const writer: CacheTraceWriter = {
-    filePath,
-    write: (line: string) => {
-      queue = queue
-        .then(() =>
-          guardedAppend(filePath, line, {
-            maxFileBytes: MAX_CACHE_TRACE_BYTES,
-            keepTailBytes: 2 * 1024 * 1024,
-          }),
-        )
-        .catch(() => undefined);
-    },
-  };
-
-  writers.set(filePath, writer);
-  return writer;
+  return getQueuedFileWriter(writers, filePath);
 }
 
 function stableStringify(value: unknown): string {

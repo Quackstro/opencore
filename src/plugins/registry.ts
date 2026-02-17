@@ -6,7 +6,11 @@ import type {
   GatewayRequestHandler,
   GatewayRequestHandlers,
 } from "../gateway/server-methods/types.js";
+import { registerInternalHook } from "../hooks/internal-hooks.js";
 import type { HookEntry } from "../hooks/types.js";
+import { resolveUserPath } from "../utils.js";
+import { registerPluginCommand } from "./commands.js";
+import { normalizePluginHttpPath } from "./http-path.js";
 import type { PluginRuntime } from "./runtime/types.js";
 import type {
   OpenClawPluginApi,
@@ -31,14 +35,10 @@ import type {
   PluginCallbackHandlerDef,
   PluginMessageHandlerDef,
 } from "./types.js";
-import { registerInternalHook } from "../hooks/internal-hooks.js";
-import { resolveUserPath } from "../utils.js";
 import {
   registerCallbackHandler as registerCallbackHandlerGlobal,
   registerMessageHandler as registerMessageHandlerGlobal,
 } from "./callback-message-handlers.js";
-import { registerPluginCommand } from "./commands.js";
-import { normalizePluginHttpPath } from "./http-path.js";
 
 export type PluginToolRegistration = {
   pluginId: string;
