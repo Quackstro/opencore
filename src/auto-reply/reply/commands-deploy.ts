@@ -2,6 +2,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { CommandHandler } from "./commands-types.js";
 import { logVerbose } from "../../globals.js";
+import { writeRestartSentinel } from "../../infra/restart-sentinel.js";
 
 const execAsync = promisify(exec);
 
@@ -187,6 +188,18 @@ export const handleDeployCommand: CommandHandler = async (params, allowTextComma
     logVerbose("[deploy] Initiating gateway restart");
 
     try {
+      await writeRestartSentinel({
+        kind: "restart",
+        status: "ok",
+        ts: Date.now(),
+        sessionKey: params.sessionKey,
+        deliveryContext: {
+          channel: params.command.channel || undefined,
+          to: params.command.to || params.command.senderId || undefined,
+        },
+        message: "✅ **Deploy complete.** Gateway restarted successfully.",
+      });
+
       await execAsync("kill $(pgrep -f openclaw-gateway) 2>/dev/null || true");
       await new Promise((resolve) => setTimeout(resolve, 3000));
       execAsync("openclaw gateway start").catch(() => {});
