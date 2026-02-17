@@ -311,15 +311,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "heal",
       nativeName: "heal",
-      description: "Approve, reject, or list pending healing agent dispatches.",
+      description: "Manage healing agents: approve, reject, list, or test.",
       textAlias: "/heal",
       category: "management",
       args: [
         {
           name: "action",
-          description: "approve | reject | list",
+          description: "approve | reject | list | test",
           type: "string",
-          choices: ["approve", "reject", "list"],
+          choices: ["approve", "reject", "list", "test"],
         },
         {
           name: "id",

@@ -66,6 +66,22 @@ describe("/heal command parsing", () => {
     expect(result).not.toBeNull();
     expect(result?.reply?.text).toContain("Usage");
   });
+
+  test("/heal test triggers approval gate", async () => {
+    const { handleHealCommand } = await import("./commands-heal.js");
+    const result = await handleHealCommand(makeParams("/heal test high"), true);
+    expect(result).not.toBeNull();
+    expect(result?.reply?.text).toContain("Approval Gate Triggered");
+    expect(result?.reply?.text).toContain("high");
+  });
+
+  test("/heal test defaults to medium severity", async () => {
+    const { handleHealCommand } = await import("./commands-heal.js");
+    const result = await handleHealCommand(makeParams("/heal test"), true);
+    expect(result).not.toBeNull();
+    expect(result?.reply?.text).toContain("Approval Gate Triggered");
+    expect(result?.reply?.text).toContain("medium");
+  });
 });
 
 // Minimal params builder for testing
