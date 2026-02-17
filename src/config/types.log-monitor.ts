@@ -1,3 +1,16 @@
+export type HealingApprovalGate = {
+  /**
+   * Require user approval before dispatching a healing agent.
+   * - "always": require approval for all severities (default)
+   * - "high-only": require approval only for high severity issues
+   * - "medium-and-above": require approval for medium and high severity
+   * - "off": no approval required, agents dispatch automatically
+   */
+  mode?: "always" | "high-only" | "medium-and-above" | "off";
+  /** Seconds to wait for user approval before expiring the request. Default: 300. */
+  timeoutSeconds?: number;
+};
+
 export type AgentDispatchConfig = {
   /** Enable agent dispatch for unresolved issues. Default: false. */
   enabled?: boolean;
@@ -15,6 +28,8 @@ export type AgentDispatchConfig = {
   maxSpawnsPerHour?: number;
   /** Agent ID to use for healing sessions. Default: "system". */
   agentId?: string;
+  /** Manual approval gate before dispatching healing agents. Default: { mode: "always" }. */
+  approvalGate?: HealingApprovalGate;
 };
 
 export type LogMonitorConfig = {

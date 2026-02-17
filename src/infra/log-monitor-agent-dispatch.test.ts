@@ -1,9 +1,14 @@
 import { afterEach, describe, expect, test } from "vitest";
 import type { AgentDispatchConfig } from "../config/types.log-monitor.js";
+import type { HealingApprovalGate } from "../config/types.log-monitor.js";
 import {
+  approveHealingDispatch,
   buildHealingAgentPrompt,
   canSpawnAgent,
   isHealingAgentSession,
+  listPendingApprovals,
+  rejectHealingDispatch,
+  requiresApproval,
   resetAgentDispatchState,
 } from "./log-monitor-agent-dispatch.js";
 import { createIssueRegistry, type IssueRegistry } from "./log-monitor-registry.js";
@@ -165,5 +170,63 @@ describe("IssueRegistry agent tracking", () => {
     registry.resetAgentFailures("err:1");
     const issue = registry.getIssue("err:1");
     expect(issue!.agentFailures).toBe(0);
+  });
+});
+
+// ============================================================================
+// Approval Gate
+// ============================================================================
+
+describe("requiresApproval", () => {
+  test("defaults to always requiring approval (undefined gate)", () => {
+    expect(requiresApproval("low", undefined)).toBe(true);
+    expect(requiresApproval("medium", undefined)).toBe(true);
+    expect(requiresApproval("high", undefined)).toBe(true);
+  });
+
+  test("mode=always requires approval for all severities", () => {
+    const gate: HealingApprovalGate = { mode: "always" };
+    expect(requiresApproval("low", gate)).toBe(true);
+    expect(requiresApproval("medium", gate)).toBe(true);
+    expect(requiresApproval("high", gate)).toBe(true);
+  });
+
+  test("mode=off never requires approval", () => {
+    const gate: HealingApprovalGate = { mode: "off" };
+    expect(requiresApproval("low", gate)).toBe(false);
+    expect(requiresApproval("medium", gate)).toBe(false);
+    expect(requiresApproval("high", gate)).toBe(false);
+  });
+
+  test("mode=high-only requires approval only for high", () => {
+    const gate: HealingApprovalGate = { mode: "high-only" };
+    expect(requiresApproval("low", gate)).toBe(false);
+    expect(requiresApproval("medium", gate)).toBe(false);
+    expect(requiresApproval("high", gate)).toBe(true);
+  });
+
+  test("mode=medium-and-above requires approval for medium and high", () => {
+    const gate: HealingApprovalGate = { mode: "medium-and-above" };
+    expect(requiresApproval("low", gate)).toBe(false);
+    expect(requiresApproval("medium", gate)).toBe(true);
+    expect(requiresApproval("high", gate)).toBe(true);
+  });
+});
+
+describe("approval lifecycle", () => {
+  test("listPendingApprovals returns empty initially", () => {
+    expect(listPendingApprovals()).toHaveLength(0);
+  });
+
+  test("rejectHealingDispatch returns false for unknown id", () => {
+    const result = rejectHealingDispatch("nonexistent-id");
+    expect(result.rejected).toBe(false);
+    expect(result.reason).toBe("approval-not-found-or-expired");
+  });
+
+  test("approveHealingDispatch returns false for unknown id", async () => {
+    const result = await approveHealingDispatch("nonexistent-id");
+    expect(result.approved).toBe(false);
+    expect(result.reason).toBe("approval-not-found-or-expired");
   });
 });

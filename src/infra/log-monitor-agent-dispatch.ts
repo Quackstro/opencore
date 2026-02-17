@@ -7,7 +7,7 @@
  */
 
 import crypto from "node:crypto";
-import type { AgentDispatchConfig } from "../config/types.log-monitor.js";
+import type { AgentDispatchConfig, HealingApprovalGate } from "../config/types.log-monitor.js";
 import type { AgentContext, LogMonitorIssue } from "./log-monitor-handlers.js";
 import type { IssueRegistry } from "./log-monitor-registry.js";
 import type { LogMonitorDeps } from "./log-monitor.js";
@@ -46,6 +46,24 @@ const activeAgents = new Map<string, ActiveAgent>();
 const spawnHistory: number[] = [];
 /** Cached registry reference, set on first dispatch call. */
 let registryRef: IssueRegistry | null = null;
+
+// ============================================================================
+// Pending Approval Requests
+// ============================================================================
+
+export interface PendingApproval {
+  id: string;
+  issueSignature: string;
+  issueMessage: string;
+  severity: "low" | "medium" | "high";
+  task: string;
+  createdAt: number;
+  expiresAt: number;
+  opts: AgentDispatchOptions;
+}
+
+const pendingApprovals = new Map<string, PendingApproval>();
+const approvalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 /** Circuit breaker: max consecutive failures before permanent escalation. */
 const CIRCUIT_BREAKER_MAX_FAILURES = 3;
@@ -161,6 +179,167 @@ ${(context?.tools ?? DEFAULT_REMEDIATION_TOOLS.map((t) => t)).map((t) => `- ${t}
 }
 
 // ============================================================================
+// Approval Gate
+// ============================================================================
+
+type Severity = "low" | "medium" | "high";
+
+export function requiresApproval(
+  severity: Severity,
+  gate: HealingApprovalGate | undefined,
+): boolean {
+  const mode = gate?.mode ?? "always";
+  switch (mode) {
+    case "off":
+      return false;
+    case "high-only":
+      return severity === "high";
+    case "medium-and-above":
+      return severity === "medium" || severity === "high";
+    case "always":
+    default:
+      return true;
+  }
+}
+
+function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentDispatchResult {
+  const id = crypto.randomUUID();
+  const timeoutSeconds = opts.config.approvalGate?.timeoutSeconds ?? 300;
+  const task = opts.agentContext?.task ?? `Heal: ${opts.issue.message}`;
+
+  const pending: PendingApproval = {
+    id,
+    issueSignature: opts.issue.signature,
+    issueMessage: opts.issue.message,
+    severity,
+    task,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + timeoutSeconds * 1000,
+    opts,
+  };
+  pendingApprovals.set(id, pending);
+
+  // Set expiry timer
+  const timer = setTimeout(() => {
+    const expired = pendingApprovals.get(id);
+    if (expired) {
+      pendingApprovals.delete(id);
+      approvalTimers.delete(id);
+      opts.deps.logger?.info?.(
+        `log-monitor: approval request ${id} expired for ${opts.issue.signature}`,
+      );
+    }
+  }, timeoutSeconds * 1000);
+  timer.unref();
+  approvalTimers.set(id, timer);
+
+  // Surface to user via system event with inline approve/reject buttons
+  surfaceApprovalRequest(pending, opts.deps);
+
+  opts.deps.logger?.info?.(
+    `log-monitor: approval requested (${id}) for healing agent dispatch — severity=${severity}, issue=${opts.issue.signature}`,
+  );
+
+  return { dispatched: false, reason: `approval-pending:${id}` };
+}
+
+function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps): void {
+  if (!deps.sessionKey) {
+    return;
+  }
+  const severityEmoji =
+    pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const text = [
+    `${severityEmoji} **Healing Agent Approval Required**`,
+    "",
+    `**Issue:** ${pending.issueMessage}`,
+    `**Severity:** ${pending.severity}`,
+    `**Proposed action:** ${pending.task}`,
+    "",
+    `Approve: \`/heal approve ${pending.id}\``,
+    `Reject: \`/heal reject ${pending.id}\``,
+    "",
+    `_Expires in ${Math.round((pending.expiresAt - pending.createdAt) / 1000)}s_`,
+  ].join("\n");
+
+  import("./system-events.js")
+    .then(({ enqueueSystemEvent }) => {
+      enqueueSystemEvent(text, { sessionKey: deps.sessionKey! });
+    })
+    .catch(() => {
+      // Ignore import failure
+    });
+}
+
+/**
+ * Approve a pending healing agent dispatch.
+ * Returns true if the approval was found and the agent was dispatched.
+ */
+export async function approveHealingDispatch(approvalId: string): Promise<{
+  approved: boolean;
+  dispatched: boolean;
+  reason?: string;
+}> {
+  const pending = pendingApprovals.get(approvalId);
+  if (!pending) {
+    return { approved: false, dispatched: false, reason: "approval-not-found-or-expired" };
+  }
+
+  // Clear pending state
+  pendingApprovals.delete(approvalId);
+  const timer = approvalTimers.get(approvalId);
+  if (timer) {
+    clearTimeout(timer);
+    approvalTimers.delete(approvalId);
+  }
+
+  // Dispatch with gate bypassed
+  const result = await dispatchHealingAgentInternal(pending.opts);
+  return { approved: true, dispatched: result.dispatched, reason: result.reason };
+}
+
+/**
+ * Reject a pending healing agent dispatch.
+ */
+export function rejectHealingDispatch(approvalId: string): { rejected: boolean; reason?: string } {
+  const pending = pendingApprovals.get(approvalId);
+  if (!pending) {
+    return { rejected: false, reason: "approval-not-found-or-expired" };
+  }
+
+  pendingApprovals.delete(approvalId);
+  const timer = approvalTimers.get(approvalId);
+  if (timer) {
+    clearTimeout(timer);
+    approvalTimers.delete(approvalId);
+  }
+
+  pending.opts.deps.logger?.info?.(
+    `log-monitor: healing dispatch rejected by user for ${pending.issueSignature}`,
+  );
+  return { rejected: true };
+}
+
+/**
+ * List all pending approval requests.
+ */
+export function listPendingApprovals(): PendingApproval[] {
+  const now = Date.now();
+  // Clean expired while listing
+  for (const [id, pending] of pendingApprovals) {
+    if (pending.expiresAt <= now) {
+      pendingApprovals.delete(id);
+      const timer = approvalTimers.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        approvalTimers.delete(id);
+      }
+    }
+  }
+  return [...pendingApprovals.values()];
+}
+
+// ============================================================================
 // Dispatch
 // ============================================================================
 
@@ -169,14 +348,33 @@ ${(context?.tools ?? DEFAULT_REMEDIATION_TOOLS.map((t) => t)).map((t) => `- ${t}
  *
  * Uses callGateway to spawn a sub-agent session, similar to sessions-spawn-tool.
  * The agent runs in the background; escalation to user happens on timeout or failure.
+ *
+ * When an approval gate is configured (default: "always"), this will surface an
+ * approval request to the user instead of dispatching immediately.
  */
 export async function dispatchHealingAgent(
   opts: AgentDispatchOptions,
 ): Promise<AgentDispatchResult> {
-  const { issue, recentLogLines, agentContext, config, registry, deps } = opts;
-
   // Cache registry reference for use by completion callbacks
-  registryRef = registry;
+  registryRef = opts.registry;
+
+  // Check approval gate
+  const severity = opts.agentContext?.severity ?? "medium";
+  if (requiresApproval(severity, opts.config.approvalGate)) {
+    return requestApproval(opts, severity);
+  }
+
+  return dispatchHealingAgentInternal(opts);
+}
+
+/**
+ * Internal dispatch — bypasses approval gate. Called directly after approval
+ * or when gate mode is "off" / severity doesn't require approval.
+ */
+async function dispatchHealingAgentInternal(
+  opts: AgentDispatchOptions,
+): Promise<AgentDispatchResult> {
+  const { issue, recentLogLines, agentContext, config, registry, deps } = opts;
 
   // Rate limit check
   const check = canSpawnAgent(issue.signature, config, registry);
@@ -441,4 +639,13 @@ export function resetAgentDispatchState(): void {
   }
   activeAgents.clear();
   spawnHistory.length = 0;
+  for (const [id] of approvalTimers) {
+    const timer = approvalTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+  pendingApprovals.clear();
+  approvalTimers.clear();
+  registryRef = null;
 }
