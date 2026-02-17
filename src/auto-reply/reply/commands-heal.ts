@@ -122,9 +122,22 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
         const expiresIn = Math.max(0, Math.round((p.expiresAt - Date.now()) / 1000));
         return `${severityEmoji} \`${p.id.slice(0, 8)}\` — ${p.issueMessage} (${p.severity}, expires in ${expiresIn}s)`;
       });
+      // Build approve/reject buttons for each pending approval
+      const buttons = pending.flatMap((p) => {
+        const shortId = p.id.slice(0, 8);
+        return [
+          [
+            { text: `✅ Approve ${shortId}`, callback_data: `/heal approve ${shortId}` },
+            { text: `🚫 Reject ${shortId}`, callback_data: `/heal reject ${shortId}` },
+          ],
+        ];
+      });
       return {
         shouldContinue: false,
-        reply: { text: `**Pending Approvals (${pending.length}):**\n${lines.join("\n")}` },
+        reply: {
+          text: `**Pending Approvals (${pending.length}):**\n${lines.join("\n")}`,
+          channelData: { telegram: { buttons } },
+        },
       };
     }
 
@@ -260,11 +273,17 @@ async function handleHealTest(
           `Severity: **${testSeverity}**`,
           `Signature: \`${testSignature}\``,
           `Approval ID: \`${shortId}\``,
-          "",
-          `The approval gate caught this. To continue the test:`,
-          `• \`/heal approve ${shortId}\` — dispatch the healing agent`,
-          `• \`/heal reject ${shortId}\` — cancel the test`,
         ].join("\n"),
+        channelData: {
+          telegram: {
+            buttons: [
+              [
+                { text: "✅ Approve", callback_data: `/heal approve ${shortId}` },
+                { text: "🚫 Reject", callback_data: `/heal reject ${shortId}` },
+              ],
+            ],
+          },
+        },
       },
     };
   }
