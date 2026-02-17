@@ -8,6 +8,9 @@ type ParsedHealCommand =
   | { ok: true; action: "reject"; id: string }
   | { ok: true; action: "list" }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
+  | { ok: true; action: "report"; id: string }
+  | { ok: true; action: "dismiss"; id: string }
+  | { ok: true; action: "apply"; id: string }
   | { ok: false; error: string };
 
 function parseHealCommand(raw: string): ParsedHealCommand | null {
@@ -37,6 +40,27 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
       return { ok: true, action: "test", severity };
     }
     return { ok: true, action: "test" };
+  }
+
+  if (action === "report" || action === "full" || action === "details") {
+    if (!tokens[1]) {
+      return { ok: false, error: "Usage: /heal report <id>" };
+    }
+    return { ok: true, action: "report", id: tokens[1] };
+  }
+
+  if (action === "dismiss" || action === "ack" || action === "close") {
+    if (!tokens[1]) {
+      return { ok: false, error: "Usage: /heal dismiss <id>" };
+    }
+    return { ok: true, action: "dismiss", id: tokens[1] };
+  }
+
+  if (action === "apply" || action === "fix") {
+    if (!tokens[1]) {
+      return { ok: false, error: "Usage: /heal apply <id>" };
+    }
+    return { ok: true, action: "apply", id: tokens[1] };
   }
 
   if (action === "approve" || action === "yes" || action === "ok") {
@@ -99,6 +123,23 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       listPendingApprovals,
       dispatchHealingAgent,
     } = await import("../../infra/log-monitor-agent-dispatch.js");
+
+    if (parsed.action === "report") {
+      return await handleHealReport(parsed.id);
+    }
+
+    if (parsed.action === "dismiss") {
+      return await handleHealDismiss(parsed.id);
+    }
+
+    if (parsed.action === "apply") {
+      return {
+        shouldContinue: false,
+        reply: {
+          text: "🔧 Apply fix is not yet implemented — review the full report and apply manually, or ask me to help.",
+        },
+      };
+    }
 
     if (parsed.action === "test") {
       return await handleHealTest(
@@ -198,6 +239,71 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 
   return null;
 };
+
+/**
+ * Show the full report for a healing report ID.
+ */
+async function handleHealReport(id: string): Promise<CommandHandlerResult> {
+  const { loadReport, getUnacknowledgedReports } = await import("../../infra/healing-reports.js");
+
+  // Try exact match first, then prefix match against unacknowledged
+  let report = loadReport(id);
+  if (!report) {
+    const unacked = getUnacknowledgedReports();
+    const match = unacked.find((r) => r.id.startsWith(id));
+    if (match) {
+      report = match;
+    }
+  }
+  if (!report) {
+    return { shouldContinue: false, reply: { text: `❌ Report \`${id}\` not found.` } };
+  }
+
+  const statusEmoji = report.success ? "✅" : "❌";
+  // Telegram has 4096 char limit — truncate if needed
+  const maxLen = 3500;
+  const body =
+    report.fullReport.length > maxLen
+      ? `${report.fullReport.slice(0, maxLen)}\n\n_(truncated — ${report.fullReport.length} chars total)_`
+      : report.fullReport;
+
+  return {
+    shouldContinue: false,
+    reply: {
+      text: [
+        `${statusEmoji} **Full Healing Report** — \`${report.id}\``,
+        `**Issue:** \`${report.issueSignature}\``,
+        `**Completed:** ${report.completedAt}`,
+        "",
+        body,
+      ].join("\n"),
+      channelData: {
+        telegram: {
+          buttons: [[{ text: "🗑 Dismiss", callback_data: `/heal dismiss ${report.id}` }]],
+        },
+      },
+    },
+  };
+}
+
+/**
+ * Dismiss/acknowledge a healing report.
+ */
+async function handleHealDismiss(id: string): Promise<CommandHandlerResult> {
+  const { acknowledgeReport, getUnacknowledgedReports } =
+    await import("../../infra/healing-reports.js");
+
+  // Try prefix match
+  const unacked = getUnacknowledgedReports();
+  const match = unacked.find((r) => r.id === id || r.id.startsWith(id));
+  const resolvedId = match?.id ?? id;
+
+  const ok = acknowledgeReport(resolvedId);
+  if (!ok) {
+    return { shouldContinue: false, reply: { text: `❌ Report \`${id}\` not found.` } };
+  }
+  return { shouldContinue: false, reply: { text: `🗑 Report \`${resolvedId}\` dismissed.` } };
+}
 
 /**
  * Simulate the full healing pipeline: classify → handler → dispatch → approval gate.

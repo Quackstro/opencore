@@ -366,7 +366,7 @@ async function extractFileBlocks(params: {
     if (skipAttachmentIndexes?.has(attachment.index)) {
       continue;
     }
-    const forcedTextMime = resolveTextMimeFromName(attachment.path ?? attachment.url ?? "");
+    let forcedTextMime = resolveTextMimeFromName(attachment.path ?? attachment.url ?? "");
     const kind = forcedTextMime ? "document" : resolveAttachmentKind(attachment);
     if (!forcedTextMime && (kind === "image" || kind === "video" || kind === "audio")) {
       continue;
@@ -390,6 +390,25 @@ async function extractFileBlocks(params: {
       }
       continue;
     }
+    // Sniff PDF magic bytes regardless of reported MIME to prevent
+    // mistyped PDFs (e.g. Telegram reporting text/csv) from being read as raw text.
+    if (bufferResult?.buffer && bufferResult.buffer.length >= 5) {
+      const header = bufferResult.buffer.subarray(0, 5).toString("ascii");
+      if (header.startsWith("%PDF")) {
+        const reportedMime = bufferResult.mime ?? attachment.mime;
+        if (reportedMime && reportedMime !== "application/pdf") {
+          logVerbose(
+            `media: PDF magic bytes detected but MIME is "${reportedMime}" — overriding to application/pdf for index=${attachment.index}`,
+          );
+        }
+        bufferResult.mime = "application/pdf";
+        // Also clear any forced text MIME from filename extension so PDF path is used
+        if (forcedTextMime) {
+          forcedTextMime = undefined;
+        }
+      }
+    }
+
     const nameHint = bufferResult?.fileName ?? attachment.path ?? attachment.url;
     const forcedTextMimeResolved = forcedTextMime ?? resolveTextMimeFromName(nameHint ?? "");
     const rawMime = bufferResult?.mime ?? attachment.mime;

@@ -34,6 +34,7 @@ export interface AgentDispatchResult {
 
 export interface ActiveAgent {
   issueSignature: string;
+  severity: "low" | "medium" | "high";
   startedAt: number;
   timer?: ReturnType<typeof setTimeout>;
 }
@@ -445,6 +446,7 @@ async function dispatchHealingAgentInternal(
     const timer = startEscalationTimer(runId, issue, timeoutSeconds * 1000, registry, deps);
     activeAgents.set(runId, {
       issueSignature: issue.signature,
+      severity: agentContext?.severity ?? "medium",
       startedAt: Date.now(),
       timer,
     });
@@ -608,6 +610,7 @@ export async function handleHealingAgentLifecycleEnd(
 /**
  * Send a structured healing completion notification directly,
  * bypassing the LLM announce rewrite for clean UI.
+ * Persists the report to disk for post-restart recall.
  */
 async function sendHealingCompletionNotification(
   childSessionKey: string,
@@ -618,6 +621,8 @@ async function sendHealingCompletionNotification(
   try {
     const { callGateway } = await import("../gateway/call.js");
     const { resolveRequesterForChildSession } = await import("../agents/subagent-registry.js");
+    const { saveReport, extractTldr, detectFix, buildCompletionMessage } =
+      await import("./healing-reports.js");
 
     const requester = resolveRequesterForChildSession(childSessionKey);
     if (!requester?.requesterSessionKey) {
@@ -638,29 +643,37 @@ async function sendHealingCompletionNotification(
     const to = requester.requesterOrigin?.to ?? entry?.lastTo;
     const accountId = requester.requesterOrigin?.accountId ?? entry?.lastAccountId;
 
+    // Determine severity from active agent's pending approval or default
+    const severity = resolveIssueSeverity(issueSignature);
+
+    // Persist report
+    const reportId = crypto.randomUUID().slice(0, 12);
+    const tldr = extractTldr(summary);
+    const { hasFix, fixDescription } = detectFix(summary);
+    const report = {
+      id: reportId,
+      issueSignature,
+      severity,
+      success,
+      tldr,
+      fullReport: summary,
+      hasFix,
+      fixDescription,
+      completedAt: new Date().toISOString(),
+      acknowledged: false,
+      childSessionKey,
+      requesterSessionKey: requester.requesterSessionKey,
+      delivery: channel && to ? { channel, to, accountId } : undefined,
+    };
+    saveReport(report);
+
     if (!channel || !to) {
       return;
     }
 
-    const statusEmoji = success ? "✅" : "❌";
-    const statusLabel = success ? "Resolved" : "Failed";
-    const signatureShort =
-      issueSignature.length > 50 ? `${issueSignature.slice(0, 50)}…` : issueSignature;
+    // Build structured message with buttons
+    const { text, buttons } = buildCompletionMessage(report);
 
-    // Truncate summary for display
-    const maxSummaryLen = 500;
-    const displaySummary =
-      summary.length > maxSummaryLen ? `${summary.slice(0, maxSummaryLen)}…` : summary;
-
-    const text = [
-      `${statusEmoji} **Healing Agent — ${statusLabel}**`,
-      "",
-      `**Issue:** \`${signatureShort}\``,
-      "",
-      displaySummary,
-    ].join("\n");
-
-    // Send directly to the channel — bypasses LLM announce rewrite
     await callGateway({
       method: "send",
       params: {
@@ -668,12 +681,79 @@ async function sendHealingCompletionNotification(
         channel,
         accountId,
         message: text,
+        buttons,
         idempotencyKey: `heal-notify:${childSessionKey}`,
       },
       timeoutMs: 15_000,
     });
   } catch {
     // Best-effort notification
+  }
+}
+
+/**
+ * Try to resolve severity for a completed issue from active agents or pending approvals.
+ */
+function resolveIssueSeverity(issueSignature: string): "low" | "medium" | "high" {
+  for (const agent of activeAgents.values()) {
+    if (agent.issueSignature === issueSignature) {
+      return agent.severity;
+    }
+  }
+  for (const pending of pendingApprovals.values()) {
+    if (pending.issueSignature === issueSignature) {
+      return pending.severity;
+    }
+  }
+  return "medium";
+}
+
+/**
+ * Resurface unacknowledged healing reports after a restart.
+ * Call this from gateway startup.
+ */
+export async function resurfaceUnacknowledgedReports(): Promise<number> {
+  try {
+    const { getUnacknowledgedReports, buildCompletionMessage } =
+      await import("./healing-reports.js");
+    const { callGateway } = await import("../gateway/call.js");
+
+    const reports = getUnacknowledgedReports();
+    if (reports.length === 0) {
+      return 0;
+    }
+
+    let surfaced = 0;
+    for (const report of reports) {
+      const { channel, to, accountId } = report.delivery ?? {};
+      if (!channel || !to) {
+        continue;
+      }
+
+      const { text, buttons } = buildCompletionMessage(report);
+      const header = `🔄 **Missed Healing Report** (from ${new Date(report.completedAt).toLocaleString()})\n\n`;
+
+      try {
+        await callGateway({
+          method: "send",
+          params: {
+            to,
+            channel,
+            accountId,
+            message: header + text,
+            buttons,
+            idempotencyKey: `heal-resurface:${report.id}`,
+          },
+          timeoutMs: 15_000,
+        });
+        surfaced++;
+      } catch {
+        // best-effort
+      }
+    }
+    return surfaced;
+  } catch {
+    return 0;
   }
 }
 
