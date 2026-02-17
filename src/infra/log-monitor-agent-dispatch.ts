@@ -44,6 +44,8 @@ export interface ActiveAgent {
 
 const activeAgents = new Map<string, ActiveAgent>();
 const spawnHistory: number[] = [];
+/** Cached registry reference, set on first dispatch call. */
+let registryRef: IssueRegistry | null = null;
 
 /** Circuit breaker: max consecutive failures before permanent escalation. */
 const CIRCUIT_BREAKER_MAX_FAILURES = 3;
@@ -172,6 +174,9 @@ export async function dispatchHealingAgent(
   opts: AgentDispatchOptions,
 ): Promise<AgentDispatchResult> {
   const { issue, recentLogLines, agentContext, config, registry, deps } = opts;
+
+  // Cache registry reference for use by completion callbacks
+  registryRef = registry;
 
   // Rate limit check
   const check = canSpawnAgent(issue.signature, config, registry);
@@ -311,17 +316,20 @@ function startEscalationTimer(
 
 /**
  * Called when a healing agent completes (from subagent-announce flow).
+ * If registry/deps are omitted, uses the cached references from the last dispatch.
  */
 export function onHealingAgentComplete(
   runId: string,
   result: { success: boolean; summary: string },
-  registry: IssueRegistry,
-  deps: LogMonitorDeps,
+  registry?: IssueRegistry | null,
+  deps?: LogMonitorDeps | null,
 ): void {
   const agent = activeAgents.get(runId);
   if (!agent) {
     return;
   }
+
+  const reg = registry ?? registryRef;
 
   // Clear escalation timer
   if (agent.timer) {
@@ -330,16 +338,62 @@ export function onHealingAgentComplete(
   activeAgents.delete(runId);
 
   if (result.success) {
-    registry.resetAgentFailures(agent.issueSignature);
-    deps.logger?.info?.(`log-monitor: healing agent ${runId} resolved issue: ${result.summary}`);
+    reg?.resetAgentFailures(agent.issueSignature);
+    deps?.logger?.info?.(`log-monitor: healing agent ${runId} resolved issue: ${result.summary}`);
   } else {
-    registry.markAgentFailure(agent.issueSignature);
+    reg?.markAgentFailure(agent.issueSignature);
     surfaceIssueInternal(
       `agent-failed:${runId}`,
       `Healing agent could not resolve: ${result.summary}`,
-      deps,
+      deps ?? { sessionKey: undefined, logger: undefined },
     );
   }
+}
+
+/**
+ * Called from the subagent lifecycle when a healing session ends.
+ * Reads the agent's final reply to determine success/failure.
+ */
+export async function handleHealingAgentLifecycleEnd(
+  runId: string,
+  childSessionKey: string,
+  outcome: { status: string; error?: string },
+): Promise<void> {
+  const agent = activeAgents.get(runId);
+  if (!agent) {
+    return;
+  }
+
+  let summary = "";
+  let success = outcome.status === "ok";
+
+  try {
+    const { readLatestAssistantReply } = await import("../agents/tools/agent-step.js");
+    const reply = await readLatestAssistantReply({ sessionKey: childSessionKey });
+    summary = reply?.trim() || "(no output)";
+
+    // Heuristic: check if the agent reported failure
+    if (success && summary) {
+      const lower = summary.toLowerCase();
+      const failureSignals = [
+        "could not",
+        "unable to",
+        "failed to",
+        "cannot fix",
+        "escalat",
+        "needs manual",
+        "needs human",
+      ];
+      if (failureSignals.some((sig) => lower.includes(sig))) {
+        success = false;
+      }
+    }
+  } catch {
+    summary = outcome.error ?? "unknown";
+    success = false;
+  }
+
+  onHealingAgentComplete(runId, { success, summary });
 }
 
 // ============================================================================

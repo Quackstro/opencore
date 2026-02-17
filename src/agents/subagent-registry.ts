@@ -240,6 +240,9 @@ function ensureListener() {
     }
     persistSubagentRuns();
 
+    // Notify healing agent dispatch system if this is a healing session
+    void notifyHealingAgentIfApplicable(evt.runId, entry);
+
     if (suppressAnnounceForSteerRestart(entry)) {
       return;
     }
@@ -736,6 +739,22 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
     }
   }
   return descendants;
+}
+
+async function notifyHealingAgentIfApplicable(runId: string, entry: SubagentRunRecord) {
+  try {
+    const { isHealingAgentSession, handleHealingAgentLifecycleEnd } =
+      await import("../infra/log-monitor-agent-dispatch.js");
+    if (!isHealingAgentSession(entry.childSessionKey)) {
+      return;
+    }
+    await handleHealingAgentLifecycleEnd(runId, entry.childSessionKey, {
+      status: entry.outcome?.status ?? "unknown",
+      error: entry.outcome?.error,
+    });
+  } catch {
+    // Best-effort: don't break subagent lifecycle if healing dispatch is unavailable.
+  }
 }
 
 export function initSubagentRegistry() {
