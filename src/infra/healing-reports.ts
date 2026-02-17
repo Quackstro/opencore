@@ -250,5 +250,13 @@ export function buildCompletionMessage(report: HealingReport): {
   row.push({ text: "🗑 Dismiss", callback_data: `/heal dismiss ${report.id}` });
   buttons.push(row);
 
+  // If fix was applied successfully, offer deploy button to restart gateway with new build
+  if (report.success && report.hasFix) {
+    buttons.push([
+      { text: "🚀 Deploy & Restart", callback_data: "/deploy_restart" },
+      { text: "⏭️ Skip Deploy", callback_data: "/skip_deploy" },
+    ]);
+  }
+
   return { text, buttons };
 }

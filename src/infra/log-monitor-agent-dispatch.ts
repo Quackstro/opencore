@@ -173,7 +173,7 @@ ${(context?.tools ?? DEFAULT_REMEDIATION_TOOLS.map((t) => t)).map((t) => `- ${t}
 4. Report what you did and whether it worked
 
 ## Safety
-- Do NOT restart the gateway unless explicitly needed
+- Do NOT restart the gateway yourself — if a restart is needed after a fix, the user will be offered a Deploy & Restart button
 - Do NOT modify config files without understanding the impact
 - If unsure, report findings and escalate to user
 `;
