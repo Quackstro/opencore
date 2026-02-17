@@ -393,7 +393,10 @@ async function dispatchHealingAgentInternal(
     return { dispatched: false, reason: check.reason };
   }
 
-  const agentId = config.agentId ?? "system";
+  // Derive agentId from requester session key when available, so the child
+  // session routes completion back correctly (e.g., agent:dev:healing:* → agent:dev:main)
+  const requesterAgent = deps.sessionKey?.match(/^agent:([^:]+):/)?.[1];
+  const agentId = requesterAgent ?? config.agentId ?? "system";
   const childSessionKey = `agent:${agentId}:healing:${crypto.randomUUID()}`;
   const runId = crypto.randomUUID();
   const timeoutSeconds = agentContext?.timeoutSeconds ?? config.timeoutSeconds ?? 300;
