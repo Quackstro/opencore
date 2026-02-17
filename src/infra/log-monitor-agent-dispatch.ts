@@ -686,18 +686,27 @@ async function sendHealingCompletionNotification(
     // Build structured message with buttons
     const { text, buttons } = buildCompletionMessage(report);
 
-    await callGateway({
-      method: "send",
-      params: {
-        to,
-        channel,
+    if (channel === "telegram") {
+      // Send directly via Telegram API to support inline buttons
+      const { sendMessageTelegram } = await import("../telegram/send.js");
+      await sendMessageTelegram(to, text, {
         accountId,
-        message: text,
         buttons,
-        idempotencyKey: `heal-notify:${childSessionKey}`,
-      },
-      timeoutMs: 15_000,
-    });
+      });
+    } else {
+      // Fallback: gateway send (no button support)
+      await callGateway({
+        method: "send",
+        params: {
+          to,
+          channel,
+          accountId,
+          message: text,
+          idempotencyKey: `heal-notify:${childSessionKey}`,
+        },
+        timeoutMs: 15_000,
+      });
+    }
   } catch {
     // Best-effort notification
   }
@@ -746,18 +755,25 @@ export async function resurfaceUnacknowledgedReports(): Promise<number> {
       const header = `🔄 **Missed Healing Report** (from ${new Date(report.completedAt).toLocaleString()})\n\n`;
 
       try {
-        await callGateway({
-          method: "send",
-          params: {
-            to,
-            channel,
+        if (channel === "telegram") {
+          const { sendMessageTelegram } = await import("../telegram/send.js");
+          await sendMessageTelegram(to, header + text, {
             accountId,
-            message: header + text,
             buttons,
-            idempotencyKey: `heal-resurface:${report.id}`,
-          },
-          timeoutMs: 15_000,
-        });
+          });
+        } else {
+          await callGateway({
+            method: "send",
+            params: {
+              to,
+              channel,
+              accountId,
+              message: header + text,
+              idempotencyKey: `heal-resurface:${report.id}`,
+            },
+            timeoutMs: 15_000,
+          });
+        }
         surfaced++;
       } catch {
         // best-effort
