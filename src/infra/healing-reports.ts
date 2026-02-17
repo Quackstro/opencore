@@ -142,19 +142,31 @@ export function extractTldr(fullReport: string): string {
     return "No output from healing agent.";
   }
 
-  // Strip markdown headers
-  const lines = fullReport
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#"));
-
-  // Take first 2-3 meaningful lines up to ~200 chars
+  const lines = fullReport.split("\n").map((l) => l.trim());
   let tldr = "";
+  let inCodeBlock = false;
+
   for (const line of lines) {
-    if (tldr.length + line.length > 250) {
+    if (line.startsWith("```")) {
+      inCodeBlock = !inCodeBlock;
+      continue;
+    }
+    if (inCodeBlock) {
+      continue;
+    }
+    if (!line) {
+      continue;
+    }
+    // Skip markdown headers, tables, horizontal rules
+    if (line.startsWith("#") || line.startsWith("|") || /^[-*_]{3,}$/.test(line)) {
+      continue;
+    }
+
+    const clean = line.replace(/^\*\*([^*]+)\*\*$/, "$1");
+    if (tldr.length + clean.length > 250) {
       break;
     }
-    tldr += (tldr ? " " : "") + line;
+    tldr += (tldr ? " " : "") + clean;
   }
   return tldr || fullReport.slice(0, 200);
 }
@@ -170,13 +182,17 @@ export function detectFix(fullReport: string): { hasFix: boolean; fixDescription
   const fixSignals = [
     "fix applied",
     "fixed by",
-    "remediation:",
     "applied fix",
-    "restarted",
+    "applied the fix",
+    "restarted the",
+    "restarted service",
     "resolved by",
-    "patched",
-    "corrected",
-    "updated config",
+    "patched the",
+    "corrected the",
+    "updated the config",
+    "modified config",
+    "remediation applied",
+    "remediation complete",
   ];
   const hasFix = fixSignals.some((s) => lower.includes(s));
   if (!hasFix) {
