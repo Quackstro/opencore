@@ -155,6 +155,22 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
 
+  // Resurface any unacknowledged healing reports from before the restart.
+  if (!skipChannels) {
+    setTimeout(async () => {
+      try {
+        const { resurfaceUnacknowledgedReports } =
+          await import("../infra/log-monitor-agent-dispatch.js");
+        const count = await resurfaceUnacknowledgedReports();
+        if (count > 0) {
+          params.log.warn(`resurfaced ${count} unacknowledged healing report(s)`);
+        }
+      } catch {
+        // best-effort
+      }
+    }, 3000);
+  }
+
   if (shouldWakeFromRestartSentinel()) {
     setTimeout(() => {
       void scheduleRestartSentinelWake({ deps: params.deps });
