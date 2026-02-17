@@ -556,15 +556,17 @@ export function onHealingAgentComplete(
 /**
  * Called from the subagent lifecycle when a healing session ends.
  * Reads the agent's final reply to determine success/failure.
+ * Sends a structured notification directly (bypassing LLM announce rewrite).
+ * Returns true if the notification was handled (caller should skip normal announce).
  */
 export async function handleHealingAgentLifecycleEnd(
   runId: string,
   childSessionKey: string,
   outcome: { status: string; error?: string },
-): Promise<void> {
+): Promise<boolean> {
   const agent = activeAgents.get(runId);
   if (!agent) {
-    return;
+    return false;
   }
 
   let summary = "";
@@ -597,6 +599,82 @@ export async function handleHealingAgentLifecycleEnd(
   }
 
   onHealingAgentComplete(runId, { success, summary });
+
+  // Send structured notification directly to the requester session
+  await sendHealingCompletionNotification(childSessionKey, agent.issueSignature, success, summary);
+  return true;
+}
+
+/**
+ * Send a structured healing completion notification directly,
+ * bypassing the LLM announce rewrite for clean UI.
+ */
+async function sendHealingCompletionNotification(
+  childSessionKey: string,
+  issueSignature: string,
+  success: boolean,
+  summary: string,
+): Promise<void> {
+  try {
+    const { callGateway } = await import("../gateway/call.js");
+    const { resolveRequesterForChildSession } = await import("../agents/subagent-registry.js");
+
+    const requester = resolveRequesterForChildSession(childSessionKey);
+    if (!requester?.requesterSessionKey) {
+      return;
+    }
+
+    // Resolve delivery context from the requester session
+    const { loadConfig } = await import("../config/config.js");
+    const { loadSessionStore, resolveAgentIdFromSessionKey, resolveStorePath } =
+      await import("../config/sessions.js");
+    const cfg = loadConfig();
+    const agentId = resolveAgentIdFromSessionKey(requester.requesterSessionKey);
+    const storePath = resolveStorePath(cfg.session?.store, { agentId });
+    const store = loadSessionStore(storePath);
+    const entry = store[requester.requesterSessionKey];
+
+    const channel = requester.requesterOrigin?.channel ?? entry?.lastChannel;
+    const to = requester.requesterOrigin?.to ?? entry?.lastTo;
+    const accountId = requester.requesterOrigin?.accountId ?? entry?.lastAccountId;
+
+    if (!channel || !to) {
+      return;
+    }
+
+    const statusEmoji = success ? "✅" : "❌";
+    const statusLabel = success ? "Resolved" : "Failed";
+    const signatureShort =
+      issueSignature.length > 50 ? `${issueSignature.slice(0, 50)}…` : issueSignature;
+
+    // Truncate summary for display
+    const maxSummaryLen = 500;
+    const displaySummary =
+      summary.length > maxSummaryLen ? `${summary.slice(0, maxSummaryLen)}…` : summary;
+
+    const text = [
+      `${statusEmoji} **Healing Agent — ${statusLabel}**`,
+      "",
+      `**Issue:** \`${signatureShort}\``,
+      "",
+      displaySummary,
+    ].join("\n");
+
+    // Send directly to the channel — bypasses LLM announce rewrite
+    await callGateway({
+      method: "send",
+      params: {
+        to,
+        channel,
+        accountId,
+        message: text,
+        idempotencyKey: `heal-notify:${childSessionKey}`,
+      },
+      timeoutMs: 15_000,
+    });
+  } catch {
+    // Best-effort notification
+  }
 }
 
 // ============================================================================
