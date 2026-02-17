@@ -1,6 +1,6 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { CommandHandler, CommandHandlerResult } from "./commands-types.js";
+import type { CommandHandler } from "./commands-types.js";
 import { logVerbose } from "../../globals.js";
 
 const execAsync = promisify(exec);
@@ -9,6 +9,7 @@ const COMMAND = "/deploy";
 
 type ParsedDeployCommand =
   | { ok: true; action: "restart" }
+  | { ok: true; action: "confirm_restart" }
   | { ok: true; action: "status" }
   | { ok: true; action: "skip" }
   | { ok: false; error: string };
@@ -18,6 +19,9 @@ function parseDeployCommand(raw: string): ParsedDeployCommand | null {
 
   // Handle button callbacks
   if (trimmed === "/deploy_upstream" || trimmed === "/deploy_restart") {
+    return { ok: true, action: "confirm_restart" };
+  }
+  if (trimmed === "/deploy_confirm") {
     return { ok: true, action: "restart" };
   }
   if (trimmed === "/skip_deploy") {
@@ -61,9 +65,7 @@ async function getDeployStatus(): Promise<{
     const { stdout: pidOut } = await execAsync("pgrep -f openclaw-gateway");
     gatewayPid = parseInt(pidOut.trim().split("\n")[0], 10) || null;
     if (gatewayPid) {
-      const { stdout: lstart } = await execAsync(
-        `ps -o lstart= -p ${gatewayPid}`,
-      );
+      const { stdout: lstart } = await execAsync(`ps -o lstart= -p ${gatewayPid}`);
       gatewayStartedAt = lstart.trim();
     }
   } catch {
@@ -151,6 +153,34 @@ export const handleDeployCommand: CommandHandler = async (params, allowTextComma
 
     lines.push("\n✅ Gateway is running the latest build.");
     return { shouldContinue: false, reply: { text: lines.join("\n") } };
+  }
+
+  if (action === "confirm_restart") {
+    const status = await getDeployStatus();
+    const lines: string[] = ["⚠️ **Confirm Gateway Restart?**"];
+    if (status.gatewayPid) {
+      lines.push(`• Running PID: ${status.gatewayPid} (started ${status.gatewayStartedAt})`);
+    }
+    if (status.buildNewerThanGateway) {
+      lines.push("• Build is newer than running gateway");
+    }
+    lines.push("\nThis will briefly take the gateway offline.");
+    return {
+      shouldContinue: false,
+      reply: {
+        text: lines.join("\n"),
+        channelData: {
+          telegram: {
+            buttons: [
+              [
+                { text: "✅ Confirm Restart", callback_data: "/deploy_confirm" },
+                { text: "❌ Cancel", callback_data: "/skip_deploy" },
+              ],
+            ],
+          },
+        },
+      },
+    };
   }
 
   if (action === "restart") {
