@@ -53,7 +53,7 @@ export class MessageRouter {
       () => this.processQueue(),
       QUEUE_PROCESS_INTERVAL_MS,
     );
-    if (this.processTimer.unref) this.processTimer.unref();
+    if (this.processTimer.unref) {this.processTimer.unref();}
   }
 
   destroy(): void {
@@ -104,11 +104,11 @@ export class MessageRouter {
     message: MessagePayload,
   ): Promise<SendResult> {
     const user = this.identityService.getUser(userId);
-    if (!user) return { messageId: "" };
+    if (!user) {return { messageId: "" };}
 
     const surfaceId = user.defaultSurface;
     const surfaceUserId = user.linkedSurfaces[surfaceId];
-    if (!surfaceUserId) return { messageId: "" };
+    if (!surfaceUserId) {return { messageId: "" };}
 
     const target: SurfaceTarget = { surfaceId, surfaceUserId };
     const adapter = this.adapters.get(surfaceId);
@@ -156,7 +156,7 @@ export class MessageRouter {
     const userEntries = this.queue.filter((e) => e.userId === userId);
     if (userEntries.length >= MAX_QUEUE_PER_USER) {
       // Remove oldest
-      const oldest = userEntries.sort(
+      const oldest = userEntries.toSorted(
         (a, b) =>
           new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime(),
       )[0];
@@ -180,12 +180,12 @@ export class MessageRouter {
     const toRemove: string[] = [];
 
     for (const entry of this.queue) {
-      if (userId && entry.userId !== userId) continue;
+      if (userId && entry.userId !== userId) {continue;}
 
       // Check backoff
       if (entry.lastAttemptAt) {
         const backoff = BACKOFF_MS[Math.min(entry.attempts - 1, BACKOFF_MS.length - 1)];
-        if (now - new Date(entry.lastAttemptAt).getTime() < backoff) continue;
+        if (now - new Date(entry.lastAttemptAt).getTime() < backoff) {continue;}
       }
 
       if (entry.attempts >= entry.maxAttempts) {
@@ -234,7 +234,7 @@ export class MessageRouter {
   // ─── Persistence ──────────────────────────────────────────────────────
 
   private loadQueue(): void {
-    if (!existsSync(this.queuePath)) return;
+    if (!existsSync(this.queuePath)) {return;}
     try {
       const raw = readFileSync(this.queuePath, "utf-8");
       this.queue = JSON.parse(raw);
@@ -245,7 +245,7 @@ export class MessageRouter {
 
   private saveQueue(): void {
     const dir = dirname(this.queuePath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {mkdirSync(dir, { recursive: true });}
     const tmp = `${this.queuePath}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.queue, null, 2), "utf-8");
     renameSync(tmp, this.queuePath);

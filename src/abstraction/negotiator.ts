@@ -70,7 +70,7 @@ export class DefaultCapabilityNegotiator implements CapabilityNegotiator {
     p: MultiChoicePrimitive,
     caps: SurfaceCapabilities,
   ): NegotiationResult {
-    if (caps.multiSelectButtons) return { strategy: "native" };
+    if (caps.multiSelectButtons) {return { strategy: "native" };}
     if (caps.inlineButtons) {
       // Can simulate with toggle buttons
       return { strategy: "native" };
@@ -85,7 +85,7 @@ export class DefaultCapabilityNegotiator implements CapabilityNegotiator {
     p: ConfirmPrimitive,
     caps: SurfaceCapabilities,
   ): NegotiationResult {
-    if (caps.inlineButtons) return { strategy: "native" };
+    if (caps.inlineButtons) {return { strategy: "native" };}
     return {
       strategy: "text-fallback",
       fallbackPrimitive: this.confirmToText(p),
@@ -113,7 +113,7 @@ export class DefaultCapabilityNegotiator implements CapabilityNegotiator {
     caps: SurfaceCapabilities,
   ): NegotiationResult {
     if (p.mediaType === "image" || p.mediaType === "file") {
-      if (caps.fileUpload) return { strategy: "native" };
+      if (caps.fileUpload) {return { strategy: "native" };}
       // Fallback: just send a link
       if (p.mediaUrl) {
         return {
@@ -131,7 +131,7 @@ export class DefaultCapabilityNegotiator implements CapabilityNegotiator {
       };
     }
     if (p.mediaType === "voice") {
-      if (caps.voiceMessages) return { strategy: "native" };
+      if (caps.voiceMessages) {return { strategy: "native" };}
       return {
         strategy: "notify-blocked",
         blockedReason:
@@ -177,8 +177,8 @@ export class DefaultCapabilityNegotiator implements CapabilityNegotiator {
 
   private metaActionsText(includeBack: boolean, includeCancel: boolean): string {
     const parts: string[] = [];
-    if (includeCancel) parts.push("'cancel' to exit");
-    if (includeBack) parts.push("'back' for previous step");
+    if (includeCancel) {parts.push("'cancel' to exit");}
+    if (includeBack) {parts.push("'back' for previous step");}
     return parts.length > 0 ? `\nType ${parts.join(", ")}.` : "";
   }
 }

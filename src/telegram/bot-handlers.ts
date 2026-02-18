@@ -1015,6 +1015,31 @@ export const registerTelegramHandlers = ({
         }
       }
 
+      // Deploy button callbacks — handle inline, delete the button message, one-shot.
+      if (data === "/deploy_restart" || data === "/deploy_confirm" || data === "/skip_deploy") {
+        try {
+          if (data === "/skip_deploy") {
+            await editCallbackMessage("⏭️ Deploy skipped.");
+            return;
+          }
+          // Both /deploy_restart and /deploy_confirm trigger the restart.
+          await editCallbackMessage("🚀 **Deploying...** Restarting gateway with latest build.");
+          // Fire the deploy command as a synthetic message so the /deploy handler runs.
+          const synth = buildSyntheticTextMessage({
+            base: callbackMessage,
+            from: callback.from,
+            text: data === "/deploy_restart" ? "/deploy_confirm" : "/deploy_confirm",
+          });
+          await processMessage(buildSyntheticContext(ctx, synth), [], storeAllowFrom, {
+            forceWasMentioned: true,
+            messageIdOverride: callback.id,
+          });
+        } catch (deployErr) {
+          runtime.error?.(danger(`deploy callback failed: ${String(deployErr)}`));
+        }
+        return;
+      }
+
       const syntheticMessage = buildSyntheticTextMessage({
         base: callbackMessage,
         from: callback.from,

@@ -28,11 +28,11 @@ export class WorkflowStateManager {
     this.statesPath = join(dataDir, "workflows", "states.json");
     this.load();
     this.gcTimer = setInterval(() => this.gc(), GC_INTERVAL_MS);
-    if (this.gcTimer.unref) this.gcTimer.unref();
+    if (this.gcTimer.unref) {this.gcTimer.unref();}
   }
 
   destroy(): void {
-    if (this.dirty) this.save();
+    if (this.dirty) {this.save();}
     if (this.gcTimer) {
       clearInterval(this.gcTimer);
       this.gcTimer = null;
@@ -55,7 +55,7 @@ export class WorkflowStateManager {
   get(userId: string, workflowId: string): WorkflowState | null {
     const key = stateKey(userId, workflowId);
     const state = this.states[key];
-    if (!state) return null;
+    if (!state) {return null;}
 
     // TTL check
     if (new Date(state.expiresAt).getTime() < Date.now()) {
@@ -77,7 +77,7 @@ export class WorkflowStateManager {
 
   delete(userId: string, workflowId: string): boolean {
     const key = stateKey(userId, workflowId);
-    if (!this.states[key]) return false;
+    if (!this.states[key]) {return false;}
     delete this.states[key];
     this.dirty = true;
     this.save();
@@ -91,7 +91,7 @@ export class WorkflowStateManager {
   getActiveForUser(userId: string): WorkflowState | null {
     const now = Date.now();
     for (const [key, state] of Object.entries(this.states)) {
-      if (state.userId !== userId) continue;
+      if (state.userId !== userId) {continue;}
       if (new Date(state.expiresAt).getTime() < now) {
         delete this.states[key];
         this.dirty = true;
@@ -99,7 +99,7 @@ export class WorkflowStateManager {
       }
       return state;
     }
-    if (this.dirty) this.save();
+    if (this.dirty) {this.save();}
     return null;
   }
 
@@ -110,7 +110,7 @@ export class WorkflowStateManager {
     const now = Date.now();
     const result: WorkflowState[] = [];
     for (const [key, state] of Object.entries(this.states)) {
-      if (state.userId !== userId) continue;
+      if (state.userId !== userId) {continue;}
       if (new Date(state.expiresAt).getTime() < now) {
         delete this.states[key];
         this.dirty = true;
@@ -118,14 +118,14 @@ export class WorkflowStateManager {
       }
       result.push(state);
     }
-    if (this.dirty) this.save();
+    if (this.dirty) {this.save();}
     return result;
   }
 
   // ─── Persistence ──────────────────────────────────────────────────────
 
   private load(): void {
-    if (!existsSync(this.statesPath)) return;
+    if (!existsSync(this.statesPath)) {return;}
     try {
       const raw = readFileSync(this.statesPath, "utf-8");
       this.states = JSON.parse(raw);
@@ -136,7 +136,7 @@ export class WorkflowStateManager {
 
   private save(): void {
     const dir = dirname(this.statesPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {mkdirSync(dir, { recursive: true });}
 
     const tmp = `${this.statesPath}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.states, null, 2), "utf-8");
@@ -153,6 +153,6 @@ export class WorkflowStateManager {
         changed = true;
       }
     }
-    if (changed) this.save();
+    if (changed) {this.save();}
   }
 }

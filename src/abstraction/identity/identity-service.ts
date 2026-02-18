@@ -51,7 +51,7 @@ export class IdentityService {
     this.load();
     this.gcTimer = setInterval(() => this.gcLinkCodes(), GC_INTERVAL_MS);
     // Unref so it doesn't keep the process alive
-    if (this.gcTimer.unref) this.gcTimer.unref();
+    if (this.gcTimer.unref) {this.gcTimer.unref();}
   }
 
   destroy(): void {
@@ -69,9 +69,9 @@ export class IdentityService {
     // Enforce max active codes per surface identity
     let activeCount = 0;
     for (const lc of this.linkCodes.values()) {
-      if (lc.issuedBy === issuedBy && !lc.claimed) activeCount++;
+      if (lc.issuedBy === issuedBy && !lc.claimed) {activeCount++;}
     }
-    if (activeCount >= MAX_CODES_PER_SURFACE) throw new MaxCodesError();
+    if (activeCount >= MAX_CODES_PER_SURFACE) {throw new MaxCodesError();}
 
     // Generate unique code
     let code: string;
@@ -98,7 +98,7 @@ export class IdentityService {
     surfaceUserId: string,
   ): UnifiedUser {
     const lc = this.linkCodes.get(code);
-    if (!lc) throw new LinkCodeNotFoundError();
+    if (!lc) {throw new LinkCodeNotFoundError();}
     if (lc.claimed || new Date(lc.expiresAt) < new Date()) {
       this.linkCodes.delete(code);
       throw new LinkCodeExpiredError();
@@ -154,7 +154,7 @@ export class IdentityService {
 
     // 1. Check store
     const existingId = this.surfaceLookup.get(key);
-    if (existingId && this.users[existingId]) return this.users[existingId];
+    if (existingId && this.users[existingId]) {return this.users[existingId];}
 
     // 2. Check manual links
     const manualId = this.findManualLink(surfaceId, surfaceUserId);
@@ -191,7 +191,7 @@ export class IdentityService {
     surfaceUserId: string,
   ): void {
     const user = this.users[unifiedUserId];
-    if (!user) throw new Error(`User "${unifiedUserId}" not found`);
+    if (!user) {throw new Error(`User "${unifiedUserId}" not found`);}
 
     const now = new Date().toISOString();
     user.linkedSurfaces[surfaceId] = surfaceUserId;
@@ -202,7 +202,7 @@ export class IdentityService {
 
   setDefaultSurface(unifiedUserId: string, surfaceId: string): void {
     const user = this.users[unifiedUserId];
-    if (!user) throw new Error(`User "${unifiedUserId}" not found`);
+    if (!user) {throw new Error(`User "${unifiedUserId}" not found`);}
     if (!user.linkedSurfaces[surfaceId]) {
       throw new SurfaceNotLinkedError(surfaceId);
     }
@@ -212,12 +212,12 @@ export class IdentityService {
 
   unlinkSurface(unifiedUserId: string, surfaceId: string): void {
     const user = this.users[unifiedUserId];
-    if (!user) throw new Error(`User "${unifiedUserId}" not found`);
+    if (!user) {throw new Error(`User "${unifiedUserId}" not found`);}
     if (Object.keys(user.linkedSurfaces).length <= 1) {
       throw new LastSurfaceError();
     }
     const surfaceUserId = user.linkedSurfaces[surfaceId];
-    if (!surfaceUserId) throw new SurfaceNotLinkedError(surfaceId);
+    if (!surfaceUserId) {throw new SurfaceNotLinkedError(surfaceId);}
 
     delete user.linkedSurfaces[surfaceId];
     delete user.linkedAt[surfaceId];
@@ -265,7 +265,7 @@ export class IdentityService {
 
   private save(): void {
     const dir = dirname(this.usersPath);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {mkdirSync(dir, { recursive: true });}
 
     const tmp = `${this.usersPath}.tmp`;
     writeFileSync(tmp, JSON.stringify(this.users, null, 2), "utf-8");
@@ -276,13 +276,13 @@ export class IdentityService {
     surfaceId: string,
     surfaceUserId: string,
   ): string | null {
-    if (!existsSync(this.manualLinksPath)) return null;
+    if (!existsSync(this.manualLinksPath)) {return null;}
     try {
       const raw = readFileSync(this.manualLinksPath, "utf-8");
       const links: Record<string, Record<string, string>> = JSON.parse(raw);
       // links = { "user-id": { "telegram": "12345", "slack": "U04ABC" } }
       for (const [userId, surfaces] of Object.entries(links)) {
-        if (surfaces[surfaceId] === surfaceUserId) return userId;
+        if (surfaces[surfaceId] === surfaceUserId) {return userId;}
       }
     } catch {
       // ignore

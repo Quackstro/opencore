@@ -257,10 +257,10 @@ export class TextOnlyAdapter implements SurfaceAdapter {
         if (p.validation) {
           const hints: string[] = [];
           if (p.validation.minLength)
-            hints.push(`min ${p.validation.minLength} chars`);
+            {hints.push(`min ${p.validation.minLength} chars`);}
           if (p.validation.maxLength)
-            hints.push(`max ${p.validation.maxLength} chars`);
-          if (hints.length) parts.push(`(${hints.join(", ")})`);
+            {hints.push(`max ${p.validation.maxLength} chars`);}
+          if (hints.length) {parts.push(`(${hints.join(", ")})`);}
         }
         parts.push("");
         parts.push("Reply with your answer.");
@@ -273,8 +273,8 @@ export class TextOnlyAdapter implements SurfaceAdapter {
       }
       case "media": {
         parts.push(p.content);
-        if (p.mediaUrl) parts.push(`📎 ${p.mediaUrl}`);
-        else if (p.mediaPath) parts.push(`📎 [file attached]`);
+        if (p.mediaUrl) {parts.push(`📎 ${p.mediaUrl}`);}
+        else if (p.mediaPath) {parts.push(`📎 [file attached]`);}
         parts.push(this.metaText(p.includeBack, p.includeCancel));
         break;
       }
@@ -285,8 +285,8 @@ export class TextOnlyAdapter implements SurfaceAdapter {
 
   private metaText(back: boolean, cancel: boolean): string {
     const parts: string[] = [];
-    if (cancel) parts.push("'cancel' to exit");
-    if (back) parts.push("'back' for previous step");
+    if (cancel) {parts.push("'cancel' to exit");}
+    if (back) {parts.push("'back' for previous step");}
     return parts.length > 0 ? `Type ${parts.join(", ")}.` : "";
   }
 }

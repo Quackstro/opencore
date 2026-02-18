@@ -61,7 +61,7 @@ function computeProgress(
   currentStep: string,
   stepHistory: string[],
 ): StepProgress | undefined {
-  if (def.showProgress === false) return undefined;
+  if (def.showProgress === false) {return undefined;}
 
   // Simple: count steps along the longest path from entry to nearest terminal
   // For display purposes, use: current = history.length + 1
@@ -84,12 +84,12 @@ function stepsToTerminal(
 
   while (queue.length > 0) {
     const { stepId, depth } = queue.shift()!;
-    if (visited.has(stepId)) continue;
+    if (visited.has(stepId)) {continue;}
     visited.add(stepId);
 
     const step = def.steps[stepId];
-    if (!step) continue;
-    if (step.terminal) return depth;
+    if (!step) {continue;}
+    if (step.terminal) {return depth;}
 
     if (step.next) {
       queue.push({ stepId: step.next, depth: depth + 1 });
@@ -115,9 +115,9 @@ function interpolate(
     const stepId = parts[0];
     const field = parts[1] ?? "input"; // default to .input
     const stepData = data[stepId];
-    if (!stepData) return "";
+    if (!stepData) {return "";}
 
-    if (field === "input") return stepData.input ?? "";
+    if (field === "input") {return stepData.input ?? "";}
     if (field === "selection") {
       return Array.isArray(stepData.selection)
         ? stepData.selection.join(", ")
@@ -154,7 +154,7 @@ export class WorkflowEngine {
 
   registerWorkflow(definition: WorkflowDefinition): ValidationResult {
     const result = validateWorkflowDefinition(definition);
-    if (!result.valid) return result;
+    if (!result.valid) {return result;}
     this.definitions.set(definition.id, definition);
     return result;
   }
@@ -170,7 +170,7 @@ export class WorkflowEngine {
     initialData?: Record<string, unknown>,
   ): Promise<WorkflowState> {
     const def = this.definitions.get(workflowId);
-    if (!def) throw new Error(`Workflow "${workflowId}" not registered`);
+    if (!def) {throw new Error(`Workflow "${workflowId}" not registered`);}
 
     // Cancel existing instance of this workflow for this user
     const existing = this.stateManager.get(userId, workflowId);
@@ -426,7 +426,7 @@ export class WorkflowEngine {
           }
           return { outcome: "tool-error", state, error: errMsg, toolResult: infoResult.result };
         }
-        if (!toolResult) toolResult = infoResult.result;
+        if (!toolResult) {toolResult = infoResult.result;}
       }
       state.stepHistory.push(state.currentStep);
       state.currentStep = nextStep.next;
@@ -452,10 +452,10 @@ export class WorkflowEngine {
     surface: SurfaceTarget,
   ): Promise<RenderedMessage | null> {
     const step = def.steps[state.currentStep];
-    if (!step) return null;
+    if (!step) {return null;}
 
     const adapter = this.adapters.get(surface.surfaceId);
-    if (!adapter) return null;
+    if (!adapter) {return null;}
 
     const progress = computeProgress(def, state.currentStep, state.stepHistory);
     const content = interpolate(step.content, state.data);
@@ -575,7 +575,7 @@ export class WorkflowEngine {
     step: WorkflowStepDefinition,
     action: ParsedUserAction,
   ): string | null {
-    if (step.terminal) return null;
+    if (step.terminal) {return null;}
 
     // Branching transitions
     if (step.transitions && action.kind === "selection") {
@@ -588,7 +588,7 @@ export class WorkflowEngine {
     }
 
     // Linear
-    if (step.next) return step.next;
+    if (step.next) {return step.next;}
 
     return null;
   }
@@ -597,7 +597,7 @@ export class WorkflowEngine {
 
   private validate(step: WorkflowStepDefinition, input: string): string | null {
     const v = step.validation;
-    if (!v) return null;
+    if (!v) {return null;}
 
     if (v.minLength !== undefined && input.length < v.minLength) {
       return (
@@ -642,9 +642,9 @@ export class WorkflowEngine {
         const field = parts[1] ?? "input";
         const stepData = state.data[stepId];
         if (stepData) {
-          if (field === "input") params[key] = stepData.input;
-          else if (field === "selection") params[key] = stepData.selection;
-          else params[key] = stepData.input ?? stepData.selection;
+          if (field === "input") {params[key] = stepData.input;}
+          else if (field === "selection") {params[key] = stepData.selection;}
+          else {params[key] = stepData.input ?? stepData.selection;}
         }
       } else {
         // Literal value

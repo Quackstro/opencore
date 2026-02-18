@@ -111,7 +111,7 @@ function decodeCallbackData(
   data: string,
 ): { workflowId: string; stepId: string; actionId: string } | null {
   const wfMatch = data.match(/^wf:([^|]+)\|s:([^|]+)\|a:(.+)$/);
-  if (!wfMatch) return null;
+  if (!wfMatch) {return null;}
   return {
     workflowId: wfMatch[1],
     stepId: wfMatch[2],
@@ -238,9 +238,9 @@ export class TelegramAdapter implements SurfaceAdapter {
     let text = this.formatText(p.content, p.progress);
     if (p.validation) {
       const hints: string[] = [];
-      if (p.validation.minLength) hints.push(`min ${p.validation.minLength} chars`);
-      if (p.validation.maxLength) hints.push(`max ${p.validation.maxLength} chars`);
-      if (hints.length) text += `\n_(${hints.join(", ")})_`;
+      if (p.validation.minLength) {hints.push(`min ${p.validation.minLength} chars`);}
+      if (p.validation.maxLength) {hints.push(`max ${p.validation.maxLength} chars`);}
+      if (hints.length) {text += `\n_(${hints.join(", ")})_`;}
     }
     // Text input has only back/cancel buttons (user types a reply)
     const metaButtons: Array<{ text: string; data: string }> = [];
@@ -295,13 +295,13 @@ export class TelegramAdapter implements SurfaceAdapter {
   // ─── Parse Action ───────────────────────────────────────────────────
 
   parseAction(rawEvent: unknown): ParsedUserAction | null {
-    if (!rawEvent || typeof rawEvent !== "object") return null;
+    if (!rawEvent || typeof rawEvent !== "object") {return null;}
     const ev = rawEvent as Record<string, unknown>;
 
     // Callback query (button press)
     if (ev.type === "callback_query" && typeof ev.data === "string") {
       const decoded = decodeCallbackData(ev.data);
-      if (!decoded) return null;
+      if (!decoded) {return null;}
 
       const surface: SurfaceTarget = {
         surfaceId: "telegram",
@@ -335,7 +335,7 @@ export class TelegramAdapter implements SurfaceAdapter {
         channelId: ev.chatId != null ? String(ev.chatId) : undefined,
       };
 
-      const text = (ev.text as string).trim();
+      const text = (ev.text).trim();
       const lower = text.toLowerCase();
 
       if (lower === "cancel" || lower === "/cancel") {
@@ -476,7 +476,7 @@ export class TelegramAdapter implements SurfaceAdapter {
     rawEvent: unknown,
     text?: string,
   ): Promise<void> {
-    if (!rawEvent || typeof rawEvent !== "object") return;
+    if (!rawEvent || typeof rawEvent !== "object") {return;}
     const ev = rawEvent as Record<string, unknown>;
     if (ev.type === "callback_query" && typeof ev.callbackQueryId === "string") {
       await this.provider.answerCallbackQuery({
@@ -514,7 +514,7 @@ export class TelegramAdapter implements SurfaceAdapter {
     for (let i = 0; i < options.length; i += MAX_BUTTONS_PER_ROW) {
       const chunk = options.slice(i, i + MAX_BUTTONS_PER_ROW);
       rows.push(chunk.map((o) => ({ text: o.text, callback_data: o.data })));
-      if (rows.length >= MAX_BUTTON_ROWS - 1) break; // Reserve last row for meta
+      if (rows.length >= MAX_BUTTON_ROWS - 1) {break;} // Reserve last row for meta
     }
 
     // Meta-action row
@@ -540,7 +540,7 @@ export class TelegramAdapter implements SurfaceAdapter {
 
   /** Split message into chunks respecting max length */
   private splitMessage(text: string): string[] {
-    if (text.length <= MAX_MESSAGE_LENGTH) return [text];
+    if (text.length <= MAX_MESSAGE_LENGTH) {return [text];}
     const chunks: string[] = [];
     let remaining = text;
     while (remaining.length > 0) {
@@ -550,7 +550,7 @@ export class TelegramAdapter implements SurfaceAdapter {
       }
       // Try to split at newline
       let splitAt = remaining.lastIndexOf("\n", MAX_MESSAGE_LENGTH);
-      if (splitAt < MAX_MESSAGE_LENGTH / 2) splitAt = MAX_MESSAGE_LENGTH;
+      if (splitAt < MAX_MESSAGE_LENGTH / 2) {splitAt = MAX_MESSAGE_LENGTH;}
       chunks.push(remaining.slice(0, splitAt));
       remaining = remaining.slice(splitAt).replace(/^\n/, "");
     }

@@ -142,7 +142,7 @@ function decodeActionId(
   actionId: string,
 ): { workflowId: string; stepId: string; actionId: string } | null {
   const match = actionId.match(/^wf:([^|]+)\|s:([^|]+)\|a:(.+)$/);
-  if (!match) return null;
+  if (!match) {return null;}
   return { workflowId: match[1], stepId: match[2], actionId: match[3] };
 }
 
@@ -248,7 +248,7 @@ export class SlackAdapter implements SurfaceAdapter {
         block_id: `actions_${i}`,
         elements: chunk,
       });
-      if (blocks.length >= MAX_BLOCKS_PER_MESSAGE) break;
+      if (blocks.length >= MAX_BLOCKS_PER_MESSAGE) {break;}
     }
 
     return this.postBlocks(target, blocks, text);
@@ -391,8 +391,8 @@ export class SlackAdapter implements SurfaceAdapter {
 
     if (p.validation) {
       const hints: string[] = [];
-      if (p.validation.minLength) hints.push(`min ${p.validation.minLength} chars`);
-      if (p.validation.maxLength) hints.push(`max ${p.validation.maxLength} chars`);
+      if (p.validation.minLength) {hints.push(`min ${p.validation.minLength} chars`);}
+      if (p.validation.maxLength) {hints.push(`max ${p.validation.maxLength} chars`);}
       if (hints.length) {
         blocks.push(this.contextBlock(`_(${hints.join(", ")})_`));
       }
@@ -548,18 +548,18 @@ export class SlackAdapter implements SurfaceAdapter {
   // ─── Parse Action ───────────────────────────────────────────────────
 
   parseAction(rawEvent: unknown): ParsedUserAction | null {
-    if (!rawEvent || typeof rawEvent !== "object") return null;
+    if (!rawEvent || typeof rawEvent !== "object") {return null;}
     const ev = rawEvent as Record<string, unknown>;
 
     // block_actions payload (button click, checkbox change)
     if (ev.type === "block_actions") {
       const actions = ev.actions as Array<Record<string, unknown>> | undefined;
-      if (!actions?.length) return null;
+      if (!actions?.length) {return null;}
 
       const action = actions[0];
       const actionIdStr = String(action.action_id ?? "");
       const decoded = decodeActionId(actionIdStr);
-      if (!decoded) return null;
+      if (!decoded) {return null;}
 
       const surface: SurfaceTarget = {
         surfaceId: "slack",
@@ -604,11 +604,11 @@ export class SlackAdapter implements SurfaceAdapter {
     // view_submission payload (modal form)
     if (ev.type === "view_submission") {
       const view = ev.view as Record<string, unknown> | undefined;
-      if (!view) return null;
+      if (!view) {return null;}
 
       const callbackId = String(view.callback_id ?? "");
       const match = callbackId.match(/^wf_modal:([^:]+):(.+)$/);
-      if (!match) return null;
+      if (!match) {return null;}
 
       const workflowId = match[1];
       const stepId = match[2];
@@ -652,7 +652,7 @@ export class SlackAdapter implements SurfaceAdapter {
         threadId: ev.threadTs != null ? String(ev.threadTs) : undefined,
       };
 
-      const text = (ev.text as string).trim();
+      const text = (ev.text).trim();
       const lower = text.toLowerCase();
 
       if (lower === "cancel" || lower === "/cancel") {
@@ -750,7 +750,7 @@ export class SlackAdapter implements SurfaceAdapter {
     const channel = target.channelId ?? target.surfaceUserId;
 
     // Can't update modals or file messages via chat.update
-    if (messageId.startsWith("modal:") || messageId.startsWith("file:")) return;
+    if (messageId.startsWith("modal:") || messageId.startsWith("file:")) {return;}
 
     const text = updated.richText ?? updated.text ?? "";
     const blocks: SlackBlock[] = [];
@@ -791,7 +791,7 @@ export class SlackAdapter implements SurfaceAdapter {
     target: SurfaceTarget,
     messageId: string,
   ): Promise<void> {
-    if (messageId.startsWith("modal:") || messageId.startsWith("file:")) return;
+    if (messageId.startsWith("modal:") || messageId.startsWith("file:")) {return;}
     const channel = target.channelId ?? target.surfaceUserId;
     await this.provider.chatDelete(channel, messageId);
   }
@@ -800,7 +800,7 @@ export class SlackAdapter implements SurfaceAdapter {
     rawEvent: unknown,
     text?: string,
   ): Promise<void> {
-    if (!rawEvent || typeof rawEvent !== "object") return;
+    if (!rawEvent || typeof rawEvent !== "object") {return;}
     const ev = rawEvent as Record<string, unknown>;
 
     // For Slack block_actions, send an ephemeral ack if text is provided
@@ -854,7 +854,7 @@ export class SlackAdapter implements SurfaceAdapter {
   }
 
   private splitText(text: string): string[] {
-    if (text.length <= MAX_MESSAGE_LENGTH) return [text];
+    if (text.length <= MAX_MESSAGE_LENGTH) {return [text];}
     const chunks: string[] = [];
     let remaining = text;
     while (remaining.length > 0) {
@@ -863,7 +863,7 @@ export class SlackAdapter implements SurfaceAdapter {
         break;
       }
       let splitAt = remaining.lastIndexOf("\n", MAX_MESSAGE_LENGTH);
-      if (splitAt < MAX_MESSAGE_LENGTH / 2) splitAt = MAX_MESSAGE_LENGTH;
+      if (splitAt < MAX_MESSAGE_LENGTH / 2) {splitAt = MAX_MESSAGE_LENGTH;}
       chunks.push(remaining.slice(0, splitAt));
       remaining = remaining.slice(splitAt).replace(/^\n/, "");
     }

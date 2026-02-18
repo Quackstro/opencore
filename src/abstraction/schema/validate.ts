@@ -29,13 +29,13 @@ export function validateWorkflowDefinition(
   const errors: ValidationError[] = [];
 
   // Required fields
-  if (!def.id) errors.push({ path: "id", message: "id is required" });
+  if (!def.id) {errors.push({ path: "id", message: "id is required" });}
   if (!def.plugin)
-    errors.push({ path: "plugin", message: "plugin is required" });
+    {errors.push({ path: "plugin", message: "plugin is required" });}
   if (!def.version)
-    errors.push({ path: "version", message: "version is required" });
+    {errors.push({ path: "version", message: "version is required" });}
   if (!def.entryPoint)
-    errors.push({ path: "entryPoint", message: "entryPoint is required" });
+    {errors.push({ path: "entryPoint", message: "entryPoint is required" });}
   if (!def.steps || Object.keys(def.steps).length === 0) {
     errors.push({ path: "steps", message: "at least one step is required" });
     return { valid: false, errors };
@@ -80,7 +80,7 @@ export function validateWorkflowDefinition(
       });
     }
 
-    if (isTerminal) hasTerminal = true;
+    if (isTerminal) {hasTerminal = true;}
 
     // Validate transition targets exist
     if (step.transitions) {
@@ -153,15 +153,15 @@ export function validateWorkflowDefinition(
     const queue = [def.entryPoint];
     while (queue.length > 0) {
       const current = queue.pop()!;
-      if (reachable.has(current)) continue;
+      if (reachable.has(current)) {continue;}
       reachable.add(current);
 
       const step = def.steps[current];
-      if (!step) continue;
+      if (!step) {continue;}
 
       if (step.transitions) {
         for (const target of Object.values(step.transitions)) {
-          if (!reachable.has(target)) queue.push(target);
+          if (!reachable.has(target)) {queue.push(target);}
         }
       }
       if (step.next && !reachable.has(step.next)) {
