@@ -13,7 +13,7 @@ import { IdentityService } from "./identity/identity-service.js";
 import { DefaultCapabilityNegotiator } from "./negotiator.js";
 import { MessageRouter } from "./router.js";
 import { WorkflowStateManager } from "./state.js";
-import { createToolExecutor } from "./tool-bridge.js";
+import { createToolExecutor, setToolFactory } from "./tool-bridge.js";
 import { registerArkWorkflows } from "./workflows/ark/index.js";
 import { registerBrainWorkflows } from "./workflows/brain/index.js";
 import { registerHealWorkflows } from "./workflows/heal/index.js";
@@ -36,6 +36,8 @@ export interface WorkflowEngineOptions {
   dataDir: string;
   /** Telegram API provider for the adapter. Optional — can be set later via setTelegramProvider(). */
   telegramProvider?: TelegramProvider;
+  /** Tool factory — returns the array of gateway tools. Lazy-called on first workflow tool invocation. */
+  toolFactory?: () => Array<{ name: string; execute?: (...args: unknown[]) => Promise<unknown> }>;
 }
 
 /**
@@ -47,7 +49,13 @@ export function initWorkflowEngine(opts: WorkflowEngineOptions): WorkflowEngine 
     return _engine;
   }
 
-  const { dataDir, telegramProvider } = opts;
+  const { dataDir, telegramProvider, toolFactory } = opts;
+
+  // Wire tool factory if provided (cast through any to bridge pi-agent-core types)
+  if (toolFactory) {
+    // oxlint-disable-next-line typescript/no-explicit-any
+    setToolFactory(toolFactory as any);
+  }
 
   // Core services
   _stateManager = new WorkflowStateManager(dataDir);

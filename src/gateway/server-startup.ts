@@ -10,6 +10,7 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
+import { createOpenClawTools } from "../agents/openclaw-tools.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
 import { resolveStateDir } from "../config/paths.js";
@@ -138,7 +139,10 @@ export async function startGatewaySidecars(params: {
   // so workflow callback/message handlers are in place for the first message.
   try {
     const stateDir = resolveStateDir(process.env);
-    initWorkflowEngine({ dataDir: stateDir });
+    initWorkflowEngine({
+      dataDir: stateDir,
+      toolFactory: () => createOpenClawTools({ config: params.cfg }),
+    });
     registerWorkflowHooks();
   } catch (err) {
     params.log.warn(`workflow engine initialization failed: ${String(err)}`);
