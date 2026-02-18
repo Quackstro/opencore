@@ -461,6 +461,23 @@ export async function runSubagentAnnounceFlow(params: {
   try {
     let targetRequesterSessionKey = params.requesterSessionKey;
     let targetRequesterOrigin = normalizeDeliveryContext(params.requesterOrigin);
+
+    // Cross-agent spawn: when the child agent differs from the requester agent,
+    // deliver through the child agent's channel (its own bot) rather than the
+    // requester's, so the response appears in the correct agent's chat.
+    {
+      const childAgentId = resolveAgentIdFromSessionKey(params.childSessionKey);
+      const requesterAgentId = resolveAgentIdFromSessionKey(params.requesterSessionKey);
+      if (childAgentId && requesterAgentId && childAgentId !== requesterAgentId) {
+        const childMainSessionKey = `agent:${childAgentId}:main`;
+        const childMainEntry = loadSessionEntryByKey(childMainSessionKey);
+        const childOrigin = deliveryContextFromSession(childMainEntry);
+        if (childOrigin?.channel && childOrigin?.accountId) {
+          targetRequesterOrigin = childOrigin;
+        }
+      }
+    }
+
     const childSessionId = (() => {
       const entry = loadSessionEntryByKey(params.childSessionKey);
       return typeof entry?.sessionId === "string" && entry.sessionId.trim()
@@ -673,6 +690,7 @@ export async function runSubagentAnnounceFlow(params: {
       const { entry } = loadRequesterSessionEntry(targetRequesterSessionKey);
       directOrigin = deliveryContextFromSession(entry);
     }
+
     // Use a deterministic idempotency key so the gateway dedup cache
     // catches duplicates if this announce is also queued by the gateway-
     // level message queue while the main session is busy (#17122).

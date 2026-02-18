@@ -1,0 +1,88 @@
+{
+  "id": "ledger-report",
+  "plugin": "ledger",
+  "version": "1.0.0",
+  "ttl": 300000,
+  "entryPoint": "choose-report",
+  "steps": {
+    "choose-report": {
+      "type": "choice",
+      "content": "📊 Financial Reports\n\nSelect a report type:",
+      "options": [
+        { "id": "spending", "label": "Spending Report" },
+        { "id": "net-worth", "label": "Net Worth" },
+        { "id": "balances", "label": "Account Balances" },
+        { "id": "ytd", "label": "Year-to-Date" }
+      ],
+      "transitions": {
+        "spending": "enter-spending-period",
+        "net-worth": "execute-net-worth",
+        "balances": "execute-balances",
+        "ytd": "execute-ytd"
+      }
+    },
+    "enter-spending-period": {
+      "type": "text-input",
+      "content": "Enter the period for the spending report (YYYY-MM):",
+      "placeholder": "2024-01",
+      "validation": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "errorMessage": "Please enter a valid period (e.g., 2024-01)."
+      },
+      "next": "execute-spending"
+    },
+    "execute-spending": {
+      "type": "info",
+      "content": "Generating spending report for {{data.enter-spending-period.input}}...",
+      "toolCall": {
+        "name": "ledger_report",
+        "paramMap": {
+          "action": "spending",
+          "period": "$data.enter-spending-period.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-net-worth": {
+      "type": "info",
+      "content": "Calculating net worth...",
+      "toolCall": {
+        "name": "ledger_report",
+        "paramMap": { "action": "netWorth" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-balances": {
+      "type": "info",
+      "content": "Fetching account balances...",
+      "toolCall": {
+        "name": "ledger_report",
+        "paramMap": { "action": "balances" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-ytd": {
+      "type": "info",
+      "content": "Generating year-to-date report...",
+      "toolCall": {
+        "name": "ledger_report",
+        "paramMap": { "action": "ytd" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "📊 Report generated. See above for details.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Report generation failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

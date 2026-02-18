@@ -1,0 +1,57 @@
+{
+  "id": "ark-backup",
+  "plugin": "ark",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "confirm-backup",
+  "steps": {
+    "confirm-backup": {
+      "type": "confirm",
+      "content": "📦 Create Backup\n\nThis will create an encrypted backup of your data. You'll need to provide a passphrase.\n\nProceed?",
+      "confirmLabel": "Create Backup",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "enter-passphrase",
+        "no": "cancelled"
+      }
+    },
+    "enter-passphrase": {
+      "type": "text-input",
+      "content": "Enter a passphrase to encrypt the backup (min 8 characters):",
+      "placeholder": "Encryption passphrase",
+      "validation": {
+        "minLength": 8,
+        "maxLength": 128,
+        "errorMessage": "Passphrase must be at least 8 characters."
+      },
+      "next": "execute-backup"
+    },
+    "execute-backup": {
+      "type": "info",
+      "content": "Creating encrypted backup...",
+      "toolCall": {
+        "name": "backup_create",
+        "paramMap": {
+          "passphrase": "$data.enter-passphrase.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Backup created successfully. Keep your passphrase safe — you'll need it to restore.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Backup cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Backup creation failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

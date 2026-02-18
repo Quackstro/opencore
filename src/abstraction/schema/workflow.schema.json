@@ -1,0 +1,131 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://openclaw.ai/schemas/workflow-definition.json",
+  "title": "WorkflowDefinition",
+  "description": "Declarative workflow definition for the Channel Abstraction Layer",
+  "type": "object",
+  "required": ["id", "plugin", "version", "entryPoint", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Unique workflow identifier"
+    },
+    "plugin": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning plugin name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+",
+      "description": "Semver version"
+    },
+    "ttl": {
+      "type": "number",
+      "minimum": 1000,
+      "default": 3600000,
+      "description": "Time-to-live for active instances in milliseconds"
+    },
+    "showProgress": {
+      "type": "boolean",
+      "default": true,
+      "description": "Show step progress indicator"
+    },
+    "entryPoint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ID of the first step (must exist in steps)"
+    },
+    "steps": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/WorkflowStep" },
+      "description": "Step definitions keyed by step ID"
+    }
+  },
+  "definitions": {
+    "WorkflowStep": {
+      "type": "object",
+      "required": ["type", "content"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["choice", "multi-choice", "confirm", "text-input", "info", "media"]
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 7,
+          "items": { "$ref": "#/definitions/PrimitiveOption" }
+        },
+        "validation": { "$ref": "#/definitions/ValidationRule" },
+        "toolCall": { "$ref": "#/definitions/ToolCallBinding" },
+        "transitions": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "next": { "type": "string" },
+        "terminal": { "type": "boolean" },
+        "placeholder": { "type": "string" },
+        "confirmLabel": { "type": "string" },
+        "denyLabel": { "type": "string" },
+        "minSelections": { "type": "number", "minimum": 0 },
+        "maxSelections": { "type": "number", "minimum": 1 },
+        "media": {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "type": "string", "enum": ["image", "file", "voice"] },
+            "url": { "type": "string" },
+            "path": { "type": "string" },
+            "mimeType": { "type": "string" }
+          }
+        }
+      }
+    },
+    "PrimitiveOption": {
+      "type": "object",
+      "required": ["id", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "style": { "type": "string", "enum": ["primary", "success", "danger"] }
+      }
+    },
+    "ValidationRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minLength": { "type": "number", "minimum": 0 },
+        "maxLength": { "type": "number", "minimum": 1 },
+        "pattern": { "type": "string" },
+        "errorMessage": { "type": "string" }
+      }
+    },
+    "ToolCallBinding": {
+      "type": "object",
+      "required": ["name", "paramMap"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "paramMap": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "onError": { "type": "string" }
+      }
+    }
+  }
+}

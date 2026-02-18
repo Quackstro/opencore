@@ -1,0 +1,44 @@
+{
+  "id": "opencore-update",
+  "plugin": "opencore",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "confirm-update",
+  "steps": {
+    "confirm-update": {
+      "type": "confirm",
+      "content": "🔄 Update OpenCore\n\nThis will check for and apply available updates. The system may restart.\n\nProceed?",
+      "confirmLabel": "Update",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-update",
+        "no": "cancelled"
+      }
+    },
+    "execute-update": {
+      "type": "info",
+      "content": "Updating OpenCore...",
+      "toolCall": {
+        "name": "opencore_update",
+        "paramMap": {},
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Update complete. Check status above.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Update cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Update failed. Please try again later.",
+      "terminal": true
+    }
+  }
+}

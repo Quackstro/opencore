@@ -1,0 +1,24 @@
+{
+  "id": "opencore-status",
+  "plugin": "opencore",
+  "version": "1.0.0",
+  "ttl": 60000,
+  "showProgress": false,
+  "entryPoint": "check",
+  "steps": {
+    "check": {
+      "type": "info",
+      "content": "Checking OpenCore status...",
+      "toolCall": {
+        "name": "opencore_status",
+        "paramMap": {}
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "📊 OpenCore status shown above.",
+      "terminal": true
+    }
+  }
+}

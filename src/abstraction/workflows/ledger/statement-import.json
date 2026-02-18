@@ -1,0 +1,79 @@
+{
+  "id": "ledger-statement-import",
+  "plugin": "ledger",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-account",
+  "steps": {
+    "enter-account": {
+      "type": "text-input",
+      "content": "📥 Import Statement\n\nEnter the account ID to import into:",
+      "placeholder": "e.g., chase-checking",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 100,
+        "errorMessage": "Please enter an account ID."
+      },
+      "next": "enter-period"
+    },
+    "enter-period": {
+      "type": "text-input",
+      "content": "Enter the statement period (YYYY-MM):",
+      "placeholder": "2024-01",
+      "validation": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "errorMessage": "Please enter a valid period (e.g., 2024-01)."
+      },
+      "next": "enter-file-path"
+    },
+    "enter-file-path": {
+      "type": "text-input",
+      "content": "Enter the path to the JSON statement file:",
+      "placeholder": "/path/to/statement.json",
+      "validation": {
+        "minLength": 1,
+        "errorMessage": "Please enter a file path."
+      },
+      "next": "confirm-import"
+    },
+    "confirm-import": {
+      "type": "confirm",
+      "content": "Import statement from {{data.enter-file-path.input}} into account **{{data.enter-account.input}}** for period **{{data.enter-period.input}}**?",
+      "confirmLabel": "Import",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-import",
+        "no": "cancelled"
+      }
+    },
+    "execute-import": {
+      "type": "info",
+      "content": "Importing statement...",
+      "toolCall": {
+        "name": "ledger_import",
+        "paramMap": {
+          "account": "$data.enter-account.input",
+          "period": "$data.enter-period.input",
+          "filePath": "$data.enter-file-path.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Statement imported successfully for {{data.enter-account.input}} ({{data.enter-period.input}}).",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Import cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Import failed. Please check the file path and try again.",
+      "terminal": true
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "identity-link-generate",
+  "plugin": "identity",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "showProgress": false,
+  "entryPoint": "generate",
+  "steps": {
+    "generate": {
+      "type": "info",
+      "content": "Generating link code...",
+      "toolCall": {
+        "name": "identity_generate_link_code",
+        "paramMap": {}
+      },
+      "next": "display"
+    },
+    "display": {
+      "type": "info",
+      "content": "🔗 Your link code is ready.\n\nEnter this code on your other surface within 10 minutes:\n\nUse `/link <code>` on the other platform to link your accounts.",
+      "terminal": true
+    }
+  }
+}

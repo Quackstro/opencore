@@ -1,0 +1,44 @@
+{
+  "id": "ledger-transaction-search",
+  "plugin": "ledger",
+  "version": "1.0.0",
+  "ttl": 300000,
+  "showProgress": false,
+  "entryPoint": "enter-query",
+  "steps": {
+    "enter-query": {
+      "type": "text-input",
+      "content": "🔍 Transaction Search\n\nEnter a merchant name or description to search for:",
+      "placeholder": "e.g., Amazon, Starbucks",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 100,
+        "errorMessage": "Please enter a search term."
+      },
+      "next": "execute-search"
+    },
+    "execute-search": {
+      "type": "info",
+      "content": "Searching transactions for \"{{data.enter-query.input}}\"...",
+      "toolCall": {
+        "name": "ledger_transactions",
+        "paramMap": {
+          "action": "search",
+          "description": "$data.enter-query.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "🔍 Search complete. Results shown above.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Search failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

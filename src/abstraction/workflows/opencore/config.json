@@ -1,0 +1,128 @@
+{
+  "id": "opencore-config",
+  "plugin": "opencore",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "choose-action",
+  "steps": {
+    "choose-action": {
+      "type": "choice",
+      "content": "⚙️ Configuration\n\nWhat would you like to configure?",
+      "options": [
+        { "id": "view", "label": "View Current Config" },
+        { "id": "set", "label": "Set a Config Value" },
+        { "id": "channel", "label": "Channel Setup" }
+      ],
+      "transitions": {
+        "view": "execute-view",
+        "set": "enter-key",
+        "channel": "enter-channel"
+      }
+    },
+    "execute-view": {
+      "type": "info",
+      "content": "Loading configuration...",
+      "toolCall": {
+        "name": "opencore_config",
+        "paramMap": { "action": "view" },
+        "onError": "error"
+      },
+      "next": "view-done"
+    },
+    "view-done": {
+      "type": "info",
+      "content": "⚙️ Configuration shown above.",
+      "terminal": true
+    },
+    "enter-key": {
+      "type": "text-input",
+      "content": "Enter the config key to set:",
+      "placeholder": "e.g., defaultModel",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 100,
+        "errorMessage": "Please enter a config key."
+      },
+      "next": "enter-value"
+    },
+    "enter-value": {
+      "type": "text-input",
+      "content": "Enter the value for **{{data.enter-key.input}}**:",
+      "placeholder": "New value",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 500,
+        "errorMessage": "Please enter a value."
+      },
+      "next": "confirm-set"
+    },
+    "confirm-set": {
+      "type": "confirm",
+      "content": "Set **{{data.enter-key.input}}** = `{{data.enter-value.input}}`?",
+      "confirmLabel": "Set",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-set",
+        "no": "cancelled"
+      }
+    },
+    "execute-set": {
+      "type": "info",
+      "content": "Updating configuration...",
+      "toolCall": {
+        "name": "opencore_config",
+        "paramMap": {
+          "action": "set",
+          "key": "$data.enter-key.input",
+          "value": "$data.enter-value.input"
+        },
+        "onError": "error"
+      },
+      "next": "set-done"
+    },
+    "set-done": {
+      "type": "info",
+      "content": "✅ Config updated: **{{data.enter-key.input}}** = `{{data.enter-value.input}}`",
+      "terminal": true
+    },
+    "enter-channel": {
+      "type": "text-input",
+      "content": "Enter the channel to configure (e.g., telegram, slack, discord):",
+      "placeholder": "Channel name",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 50,
+        "errorMessage": "Please enter a channel name."
+      },
+      "next": "execute-channel-setup"
+    },
+    "execute-channel-setup": {
+      "type": "info",
+      "content": "Running setup for {{data.enter-channel.input}}...",
+      "toolCall": {
+        "name": "opencore_config",
+        "paramMap": {
+          "action": "channelSetup",
+          "channel": "$data.enter-channel.input"
+        },
+        "onError": "error"
+      },
+      "next": "channel-done"
+    },
+    "channel-done": {
+      "type": "info",
+      "content": "✅ Channel setup complete for {{data.enter-channel.input}}.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Configuration change cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Configuration operation failed.",
+      "terminal": true
+    }
+  }
+}

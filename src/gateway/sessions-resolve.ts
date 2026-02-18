@@ -38,6 +38,23 @@ export async function resolveSessionKeyFromResolveParams(params: {
     };
   }
   if (selectionCount === 0) {
+    // If only agentId is provided, resolve to the agent's main session key directly.
+    const bareAgentId = typeof p.agentId === "string" ? p.agentId.trim() : "";
+    if (bareAgentId) {
+      const mainKey = `agent:${bareAgentId}:main`;
+      const target = resolveGatewaySessionStoreTarget({ cfg, key: mainKey });
+      const store = loadSessionStore(target.storePath);
+      if (store[target.canonicalKey]) {
+        return { ok: true, key: target.canonicalKey };
+      }
+      return {
+        ok: false,
+        error: errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `No session found for agent: ${bareAgentId}`,
+        ),
+      };
+    }
     return {
       ok: false,
       error: errorShape(ErrorCodes.INVALID_REQUEST, "Either key, sessionId, or label is required"),

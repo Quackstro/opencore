@@ -1,0 +1,68 @@
+{
+  "id": "ark-restore",
+  "plugin": "ark",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-file",
+  "steps": {
+    "enter-file": {
+      "type": "text-input",
+      "content": "📦 Restore Backup\n\nEnter the backup filename to restore:",
+      "placeholder": "backup-2024-01-15.ark",
+      "validation": {
+        "minLength": 1,
+        "errorMessage": "Please enter a backup filename."
+      },
+      "next": "enter-passphrase"
+    },
+    "enter-passphrase": {
+      "type": "text-input",
+      "content": "Enter the passphrase used to encrypt this backup:",
+      "placeholder": "Decryption passphrase",
+      "validation": {
+        "minLength": 8,
+        "maxLength": 128,
+        "errorMessage": "Passphrase must be at least 8 characters."
+      },
+      "next": "confirm-restore"
+    },
+    "confirm-restore": {
+      "type": "confirm",
+      "content": "⚠️ Restore from **{{data.enter-file.input}}**?\n\nThis will overwrite current data. This action cannot be undone.",
+      "confirmLabel": "Restore",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-restore",
+        "no": "cancelled"
+      }
+    },
+    "execute-restore": {
+      "type": "info",
+      "content": "Restoring from backup...",
+      "toolCall": {
+        "name": "backup_restore",
+        "paramMap": {
+          "file": "$data.enter-file.input",
+          "passphrase": "$data.enter-passphrase.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Backup restored successfully from {{data.enter-file.input}}.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Restore cancelled. No data was changed.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Restore failed. Please check the filename and passphrase.",
+      "terminal": true
+    }
+  }
+}

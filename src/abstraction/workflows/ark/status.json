@@ -1,0 +1,24 @@
+{
+  "id": "ark-status",
+  "plugin": "ark",
+  "version": "1.0.0",
+  "ttl": 60000,
+  "showProgress": false,
+  "entryPoint": "check",
+  "steps": {
+    "check": {
+      "type": "info",
+      "content": "Checking backup status...",
+      "toolCall": {
+        "name": "backup_status",
+        "paramMap": {}
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "📦 Backup status retrieved. See above for details.",
+      "terminal": true
+    }
+  }
+}

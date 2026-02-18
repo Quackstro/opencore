@@ -72,6 +72,41 @@ export function createSessionsSendTool(opts?: {
       }
 
       let sessionKey = sessionKeyParam;
+
+      // When only agentId is provided (no sessionKey, no label), resolve to agent:<id>:main directly.
+      if (!sessionKey && !labelParam && labelAgentIdParam) {
+        const requestedAgentId = normalizeAgentId(labelAgentIdParam);
+        const requesterAgentId = resolveAgentIdFromSessionKey(effectiveRequesterKey);
+
+        if (restrictToSpawned && requestedAgentId !== requesterAgentId) {
+          return jsonResult({
+            runId: crypto.randomUUID(),
+            status: "forbidden",
+            error: "Sandboxed sessions_send is limited to this agent",
+          });
+        }
+
+        if (requesterAgentId && requestedAgentId !== requesterAgentId) {
+          if (!a2aPolicy.enabled) {
+            return jsonResult({
+              runId: crypto.randomUUID(),
+              status: "forbidden",
+              error:
+                "Agent-to-agent messaging is disabled. Set tools.agentToAgent.enabled=true to allow cross-agent sends.",
+            });
+          }
+          if (!a2aPolicy.isAllowed(requesterAgentId, requestedAgentId)) {
+            return jsonResult({
+              runId: crypto.randomUUID(),
+              status: "forbidden",
+              error: "Agent-to-agent messaging denied by tools.agentToAgent.allow.",
+            });
+          }
+        }
+
+        sessionKey = `agent:${requestedAgentId}:main`;
+      }
+
       if (!sessionKey && labelParam) {
         const requesterAgentId = resolveAgentIdFromSessionKey(effectiveRequesterKey);
         const requestedAgentId = labelAgentIdParam

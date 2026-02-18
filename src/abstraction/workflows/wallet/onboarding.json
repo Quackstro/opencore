@@ -1,0 +1,51 @@
+{
+  "id": "wallet-onboarding",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 3600000,
+  "entryPoint": "welcome",
+  "steps": {
+    "welcome": {
+      "type": "info",
+      "content": "🐕 Welcome to DOGE Wallet!\n\nI can help you send and receive Dogecoin right from this chat.\n\n• Your keys are encrypted and stored locally\n• I'll generate a recovery phrase — you MUST save it\n• You control spending limits for autonomous transactions\n\nReady to set up your wallet?",
+      "next": "confirm-create"
+    },
+    "confirm-create": {
+      "type": "confirm",
+      "content": "Create a new wallet? This will generate an encrypted keystore and a 24-word recovery phrase.",
+      "confirmLabel": "Create Wallet",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "set-passphrase",
+        "no": "cancelled"
+      }
+    },
+    "set-passphrase": {
+      "type": "text-input",
+      "content": "🔐 Enter an encryption passphrase for your wallet.\n\nChoose something strong:\n• At least 8 characters\n• Mix of letters, numbers, symbols\n\n⚠️ If you forget this, you'll need your recovery phrase to restore.",
+      "placeholder": "Minimum 8 characters",
+      "validation": {
+        "minLength": 8,
+        "maxLength": 128,
+        "errorMessage": "Passphrase must be at least 8 characters."
+      },
+      "toolCall": {
+        "name": "wallet_init",
+        "paramMap": {
+          "passphrase": "$input"
+        }
+      },
+      "next": "complete"
+    },
+    "complete": {
+      "type": "info",
+      "content": "🎉 Your DOGE Wallet is Ready!\n\nYour recovery phrase has been sent via secure DM.\n\n📋 Quick commands:\n• Check balance — ask about your wallet balance\n• Send DOGE — tell me who to pay and how much\n• View history — ask for recent transactions\n\n💡 Tip: Start with a small test deposit (~10 DOGE)\n\nMuch wallet. Very ready. Wow. 🐕",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Wallet setup cancelled. No changes were made.\n\nYou can start again anytime.",
+      "terminal": true
+    }
+  }
+}
