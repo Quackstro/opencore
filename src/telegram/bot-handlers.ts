@@ -984,6 +984,11 @@ export const registerTelegramHandlers = ({
             chat: { id: chatId },
           });
           if (pluginResult) {
+            // If text is empty, the handler handled it silently (e.g., workflow
+            // engine already rendered via its own adapter). Just stop the pipeline.
+            if (!pluginResult.text) {
+              return;
+            }
             const replyOpts: Record<string, unknown> = {};
             if (pluginResult.parseMode) {
               replyOpts.parse_mode = pluginResult.parseMode;
@@ -1171,6 +1176,15 @@ export const registerTelegramHandlers = ({
               chat: { id: chatId },
             });
             if (pluginMsgResult) {
+              // Delete user message if requested (e.g., passphrase security)
+              if (pluginMsgResult.deleteMessageId) {
+                bot.api.deleteMessage(chatId, msg.message_id).catch(() => {});
+              }
+              // If text is empty, the handler handled it silently (e.g., workflow
+              // engine already rendered via its own adapter). Just stop the pipeline.
+              if (!pluginMsgResult.text) {
+                return;
+              }
               const replyOpts: Record<string, unknown> = {};
               if (pluginMsgResult.parseMode) {
                 replyOpts.parse_mode = pluginMsgResult.parseMode;
@@ -1180,10 +1194,6 @@ export const registerTelegramHandlers = ({
                 (pluginMsgResult as any)?.channelData?.telegram?.buttons;
               if (msgButtons) {
                 replyOpts.reply_markup = buildInlineKeyboard(msgButtons);
-              }
-              // Delete user message if requested (e.g., passphrase security)
-              if (pluginMsgResult.deleteMessageId) {
-                bot.api.deleteMessage(chatId, msg.message_id).catch(() => {});
               }
               await withTelegramApiErrorLogging({
                 operation: "sendMessage",

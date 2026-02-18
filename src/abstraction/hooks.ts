@@ -136,11 +136,9 @@ async function handleWorkflowCallback(
   const errorText = actionResultToText(result.outcome, result.error);
 
   if (result.outcome === "advanced" || result.outcome === "completed") {
-    // Return empty-ish result to signal "handled" without sending another message.
-    // The plugin callback handler in bot-handlers.ts edits the callback message
-    // with result.text — we want to suppress that since the engine already rendered.
-    // Returning null would pass through to other handlers, so return a minimal ack.
-    return null;
+    // Return empty text to signal "handled, no reply needed".
+    // bot-handlers.ts skips sendMessage/editMessageText when text is empty.
+    return { text: "" };
   }
 
   if (errorText) {
@@ -205,20 +203,9 @@ async function handleWorkflowMessage(
   const result = await engine.handleAction(userId, action);
 
   if (result.outcome === "advanced" || result.outcome === "completed") {
-    // Engine rendered via adapter. Return a minimal "handled" signal
-    // so bot-handlers.ts doesn't pass through to LLM.
-    // We need to return a non-null result to stop the pipeline.
-    // But we don't want to send an extra message. The existing code in
-    // bot-handlers.ts sends result.text via bot.api.sendMessage.
-    // So we need to return something that won't be disruptive.
-    // Unfortunately the handler contract requires text — return a
-    // zero-width space to minimize visual noise, or handle at a higher level.
-    //
-    // FIXME: The handler contract should support a "handled, no reply" signal.
-    // For now, return null and accept that text-input steps during active
-    // workflows may also hit the LLM. The callback path (buttons) is the
-    // primary interaction mode and works correctly.
-    return null;
+    // Return empty text to signal "handled, no reply needed".
+    // bot-handlers.ts skips sendMessage when text is empty.
+    return { text: "" };
   }
 
   const errorText = actionResultToText(result.outcome, result.error);
