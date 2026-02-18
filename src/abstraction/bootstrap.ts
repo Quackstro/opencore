@@ -68,8 +68,10 @@ export function initWorkflowEngine(opts: WorkflowEngineOptions): WorkflowEngine 
     _engine.registerAdapter(_telegramAdapter);
   }
 
-  // Always register text fallback adapter
-  const textAdapter = new TextOnlyAdapter();
+  // Always register text fallback adapter (no-op send for now; real usage goes through Telegram)
+  const textAdapter = new TextOnlyAdapter(async (_target, _text) => ({
+    messageId: `text-${Date.now()}`,
+  }));
   _engine.registerAdapter(textAdapter);
 
   // Register all workflow definitions
