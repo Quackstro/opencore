@@ -649,6 +649,22 @@ function buildChatCommands(): ChatCommandDefinition[] {
       formatArgs: COMMAND_ARG_FORMATTERS.queue,
     }),
     defineChatCommand({
+      key: "workflow",
+      description: "Start, cancel, or list workflows.",
+      textAliases: ["/workflow", "/wf"],
+      scope: "text",
+      category: "tools",
+      acceptsArgs: true,
+      argsParsing: "none",
+      args: [
+        {
+          name: "id",
+          description: "Workflow ID or action (list, cancel)",
+          type: "string",
+        },
+      ],
+    }),
+    defineChatCommand({
       key: "bash",
       description: "Run host shell commands (host-only).",
       textAlias: "/bash",
