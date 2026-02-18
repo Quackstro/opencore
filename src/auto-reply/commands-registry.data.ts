@@ -327,7 +327,8 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "heal",
       nativeName: "heal",
-      description: "Manage healing agents: approve, reject, list, or test.",
+      description:
+        "Self-healing pipeline: monitors errors, auto-resolves known patterns, dispatches AI healing agents.",
       textAlias: "/heal",
       category: "management",
       args: [
@@ -343,7 +344,11 @@ function buildChatCommands(): ChatCommandDefinition[] {
           type: "string",
         },
       ],
-      argsMenu: "auto",
+      argsMenu: {
+        arg: "action",
+        title:
+          "🩺 **Self-Healing Pipeline**\nMonitors logs for errors, auto-resolves known patterns, and dispatches AI agents for unresolved issues.\n\nChoose an action:",
+      },
     }),
     defineChatCommand({
       key: "config",
