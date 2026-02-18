@@ -434,7 +434,7 @@ export async function runProviderEntry(params: {
       provider: providerId,
       apiKeys,
       execute: async (apiKey) =>
-        provider.transcribeAudio({
+        provider.transcribeAudio!({
           buffer: media.buffer,
           fileName: media.fileName,
           mime: media.mime,
@@ -489,7 +489,7 @@ export async function runProviderEntry(params: {
     provider: providerId,
     apiKeys,
     execute: (apiKey) =>
-      provider.describeVideo({
+      provider.describeVideo!({
         buffer: media.buffer,
         fileName: media.fileName,
         mime: media.mime,

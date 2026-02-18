@@ -416,7 +416,7 @@ export function buildInlineKeyboard(
         )
         .map((button): InlineKeyboardButton => {
           if ((button as unknown as { url?: string })?.url) {
-            return { text: button.text, url: (button as unknown as { url?: string })?.url };
+            return { text: button.text, url: (button as unknown as { url?: string })?.url || "" };
           }
           return {
             text: button.text,
