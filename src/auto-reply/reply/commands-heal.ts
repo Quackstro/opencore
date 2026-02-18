@@ -23,7 +23,17 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
     return {
       ok: false,
       error:
-        "Usage: /heal approve <id> | /heal reject <id> | /heal list | /heal test [low|medium|high]",
+        "🩺 **Self-Healing Pipeline**\n" +
+        "Monitors logs and diagnostic events for errors, auto-resolves known patterns, " +
+        "and dispatches AI healing agents for unresolved issues.\n\n" +
+        "**Commands:**\n" +
+        "• `/heal list` — show pending approval requests\n" +
+        "• `/heal approve <id>` — approve a healing agent dispatch\n" +
+        "• `/heal reject <id>` — reject a pending request\n" +
+        "• `/heal test [low|medium|high]` — inject a simulated error for E2E testing\n" +
+        "• `/heal report <id>` — view full healing report\n" +
+        "• `/heal dismiss <id>` — acknowledge and close a report\n" +
+        "• `/heal apply <id>` — apply a suggested fix (experimental)",
     };
   }
 
