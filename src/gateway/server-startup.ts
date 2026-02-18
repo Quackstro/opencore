@@ -175,6 +175,24 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
 
+  // Start the log monitor background service (self-healing pipeline).
+  let logMonitorHandle: { stop(): void; updateConfig(cfg: unknown): void } | null = null;
+  if (params.cfg.logMonitor?.enabled) {
+    try {
+      const { startLogMonitor } = await import("../infra/log-monitor.js");
+      logMonitorHandle = startLogMonitor(params.cfg.logMonitor, {
+        logFile: process.env.OPENCLAW_LOG_FILE || "/var/log/opencore.err.log",
+        sessionKey: "system",
+        logger: {
+          info: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
+          warn: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
+        },
+      });
+    } catch (err) {
+      params.log.warn(`log monitor failed to start: ${String(err)}`);
+    }
+  }
+
   // Resurface any unacknowledged healing reports from before the restart.
   if (!skipChannels) {
     setTimeout(async () => {
@@ -197,5 +215,5 @@ export async function startGatewaySidecars(params: {
     }, 750);
   }
 
-  return { browserControl, pluginServices };
+  return { browserControl, pluginServices, logMonitorHandle };
 }

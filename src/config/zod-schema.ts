@@ -318,6 +318,26 @@ export const OpenClawSchema = z
         minOccurrences: z.number().int().positive().optional(),
         autoResolve: z.boolean().optional(),
         crashRecovery: z.boolean().optional(),
+        agentDispatch: z
+          .object({
+            enabled: z.boolean().optional(),
+            timeoutSeconds: z.number().int().positive().optional(),
+            model: z.string().optional(),
+            thinking: z.string().optional(),
+            maxConcurrent: z.number().int().positive().optional(),
+            cooldownSeconds: z.number().int().nonnegative().optional(),
+            maxSpawnsPerHour: z.number().int().positive().optional(),
+            agentId: z.string().optional(),
+            approvalGate: z
+              .object({
+                mode: z.enum(["always", "high-only", "medium-and-above", "off"]).optional(),
+                timeoutSeconds: z.number().int().positive().optional(),
+              })
+              .strict()
+              .optional(),
+          })
+          .strict()
+          .optional(),
       })
       .strict()
       .optional(),
