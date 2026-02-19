@@ -327,9 +327,11 @@ function editApprovalMessage(pending: PendingApproval, statusLine: string): void
   if (!pending.telegramMessageId || !pending.telegramChatId) return;
   const severityEmoji =
     pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const shortId = pending.id.slice(0, 8);
   const updatedText = [
     statusLine,
     "",
+    `🆔 \`${shortId}\``,
     `${severityEmoji} **Issue:** ${pending.issueMessage}`,
     `**Severity:** ${pending.severity}`,
   ].join("\n");
