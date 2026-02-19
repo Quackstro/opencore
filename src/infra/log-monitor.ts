@@ -404,12 +404,15 @@ async function resolveIssue(
 ): Promise<void> {
   registry.markAutoResolveAttempt(issue.signature);
 
-  const result = await runHandlers({ ...issue, occurrences: 0 }, ctx);
+  const issueRecord = registry.getIssue(issue.signature);
+  const occurrences = issueRecord?.occurrences ?? 0;
+
+  const result = await runHandlers({ ...issue, occurrences }, ctx);
 
   if (result) {
     const resolution = normalizeResolution(result.resolution);
     deps.logger?.info?.(
-      `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result}`,
+      `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result} (occurrences=${occurrences})`,
     );
 
     if (resolution.result === "needs-agent") {
@@ -417,7 +420,7 @@ async function resolveIssue(
       if (config.enabled) {
         const recentLines = getRecentLogLines(deps, 50);
         const dispatchResult = await dispatchHealingAgent({
-          issue: { ...issue, occurrences: 0 },
+          issue: { ...issue, occurrences },
           recentLogLines: recentLines,
           agentContext: resolution.agentContext,
           config,
