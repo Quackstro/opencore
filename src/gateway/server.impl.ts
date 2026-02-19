@@ -622,7 +622,8 @@ export async function startGatewayServer(
 
   let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
   if (!minimalTestGateway) {
-    ({ browserControl, pluginServices } = await startGatewaySidecars({
+    let logMonitorHandle: Awaited<ReturnType<typeof startGatewaySidecars>>["logMonitorHandle"] = null;
+    ({ browserControl, pluginServices, logMonitorHandle } = await startGatewaySidecars({
       cfg: cfgAtStart,
       pluginRegistry,
       defaultWorkspaceDir,
@@ -731,6 +732,9 @@ export async function startGatewayServer(
       skillsChangeUnsub();
       authRateLimiter?.dispose();
       channelHealthMonitor?.stop();
+      if (logMonitorHandle) {
+        try { logMonitorHandle.stop(); } catch { /* ignore */ }
+      }
       await close(opts);
     },
   };
