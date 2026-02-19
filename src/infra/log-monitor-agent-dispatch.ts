@@ -281,6 +281,7 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
   const text = [
     `${severityEmoji} **Healing Agent Approval Required**`,
     "",
+    `🆔 \`${shortId}\``,
     `**Issue:** ${pending.issueMessage}`,
     `**Severity:** ${pending.severity}`,
     `**Proposed action:** ${pending.task}`,
@@ -290,8 +291,8 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
 
   const buttons = [
     [
-      { text: `✅ Approve ${shortId}`, callback_data: `/heal approve ${shortId}` },
-      { text: `🚫 Reject ${shortId}`, callback_data: `/heal reject ${shortId}` },
+      { text: `✅ Approve`, callback_data: `/heal approve ${shortId}` },
+      { text: `🚫 Reject`, callback_data: `/heal reject ${shortId}` },
     ],
   ];
 
