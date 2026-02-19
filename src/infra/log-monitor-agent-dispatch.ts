@@ -619,20 +619,53 @@ export async function handleHealingAgentLifecycleEnd(
     const reply = await readLatestAssistantReply({ sessionKey: childSessionKey });
     summary = reply?.trim() || "(no output)";
 
-    // Heuristic: check if the agent reported failure
+    // Heuristic: check if the agent reported failure vs successful diagnosis
     if (success && summary) {
       const lower = summary.toLowerCase();
-      const failureSignals = [
-        "could not",
-        "unable to",
-        "failed to",
-        "cannot fix",
-        "escalat",
-        "needs manual",
-        "needs human",
+
+      // Success signals: agent completed diagnosis, even if no fix was needed
+      const successSignals = [
+        "self-resolved",
+        "self resolved",
+        "no action needed",
+        "no action required",
+        "no fix needed",
+        "no fix required",
+        "no remediation",
+        "nothing urgent",
+        "benign",
+        "transient",
+        "already resolved",
+        "resolved itself",
+        "not a real",
+        "false positive",
+        "diagnosis complete",
+        "no real error",
+        "no real issue",
+        "running fine",
+        "running correctly",
+        "operating normally",
+        "healthy",
       ];
-      if (failureSignals.some((sig) => lower.includes(sig))) {
-        success = false;
+      const isSuccessfulDiagnosis = successSignals.some((sig) => lower.includes(sig));
+
+      if (!isSuccessfulDiagnosis) {
+        const failureSignals = [
+          "could not fix",
+          "unable to fix",
+          "unable to resolve",
+          "failed to fix",
+          "failed to resolve",
+          "cannot fix",
+          "cannot resolve",
+          "escalat",
+          "needs manual",
+          "needs human",
+          "requires manual",
+        ];
+        if (failureSignals.some((sig) => lower.includes(sig))) {
+          success = false;
+        }
       }
     }
   } catch {
