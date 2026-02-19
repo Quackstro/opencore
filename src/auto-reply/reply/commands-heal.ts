@@ -213,8 +213,8 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
         shouldContinue: false,
         reply: {
           text: result.dispatched
-            ? `✅ Healing agent approved and dispatched for: ${match.issueMessage}`
-            : `⚠️ Approved but dispatch failed: ${result.reason}`,
+            ? `✅ Healing agent approved and dispatched for: ${match.issueMessage}\n\n📋 Report ID: \`${match.id.slice(0, 8)}\``
+            : `⚠️ Approved but dispatch failed: ${result.reason}\n\nID: \`${match.id.slice(0, 8)}\``,
         },
       };
     }

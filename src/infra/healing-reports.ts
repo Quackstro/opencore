@@ -235,6 +235,7 @@ export function buildCompletionMessage(report: HealingReport): {
     `${statusEmoji} **Healing Agent — ${statusLabel}**`,
     "",
     `${severityEmoji} **Issue:** \`${sigShort}\``,
+    `🆔 **Report:** \`${report.id}\``,
     "",
     `**TL;DR:** ${report.tldr}`,
     ...(report.hasFix && report.fixDescription ? [`\n🔧 **Fix:** ${report.fixDescription}`] : []),
