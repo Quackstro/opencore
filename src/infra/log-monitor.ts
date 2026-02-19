@@ -134,6 +134,33 @@ export function classifyLogLine(line: string): ClassifiedIssue | null {
     };
   }
 
+  // Match lane task errors (command queue failures — rate limits, auth errors, etc.)
+  const laneMatch = line.match(
+    /\[diagnostic\] lane task error: lane=(\S+).*?error="(.+)"/,
+  );
+  if (laneMatch) {
+    const lane = laneMatch[1];
+    const errMsg = laneMatch[2].slice(0, 200);
+    const isNetwork = errMsg.includes("rate limit") || errMsg.includes("ECONNRESET") ||
+      errMsg.includes("ETIMEDOUT") || errMsg.includes("fetch failed");
+    return {
+      signature: `lane:${lane.split(":").slice(0, 2).join(":")}:${errMsg.slice(0, 50)}`,
+      category: isNetwork ? "network" : "error",
+      message: `Lane ${lane}: ${errMsg}`,
+    };
+  }
+
+  // Match embedded agent failures (all models failed)
+  const agentFailMatch = line.match(/Embedded agent failed.*?:\s*(.+)/);
+  if (agentFailMatch) {
+    const errMsg = agentFailMatch[1].slice(0, 200);
+    return {
+      signature: `agent:embedded-fail:${errMsg.slice(0, 50)}`,
+      category: "error",
+      message: errMsg,
+    };
+  }
+
   // Match uncaught exception logs
   if (line.includes("[openclaw] FATAL uncaught exception")) {
     const msg = line.replace(/.*\[openclaw\]\s*/, "").slice(0, 200);
