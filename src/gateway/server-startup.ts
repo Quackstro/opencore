@@ -204,16 +204,15 @@ export async function startGatewaySidecars(params: {
         (b: { agentId?: string }) => b.agentId === defaultAgent?.id,
       ) as { agentId?: string; match?: { channel?: string; accountId?: string } } | undefined;
       const deliveryAccountId = defaultBinding?.match?.accountId;
-      // Read paired user from Telegram pairing store
+      // Read allowed user from Telegram credentials (allowFrom list)
       let deliveryTo: string | undefined;
       try {
-        const pairingPath = `${process.env.HOME || "/home/clawdbot"}/.openclaw/telegram/paired-users.json`;
         const fs = await import("node:fs");
-        if (fs.existsSync(pairingPath)) {
-          const paired = JSON.parse(fs.readFileSync(pairingPath, "utf-8")) as Record<string, unknown>;
-          // Use the first paired user ID
-          const firstKey = Object.keys(paired)[0];
-          if (firstKey) deliveryTo = firstKey;
+        const homeDir = process.env.HOME || "/home/clawdbot";
+        const allowFromPath = `${homeDir}/.openclaw/credentials/telegram-allowFrom.json`;
+        if (fs.existsSync(allowFromPath)) {
+          const data = JSON.parse(fs.readFileSync(allowFromPath, "utf-8")) as { allowFrom?: string[] };
+          if (data.allowFrom?.[0]) deliveryTo = data.allowFrom[0];
         }
       } catch {
         // best-effort
