@@ -217,8 +217,27 @@ export async function startGatewaySidecars(params: {
       } catch {
         // best-effort
       }
+      // Resolve log file path: env var > supervisor stderr log > resolved logger settings
+      let resolvedLogFile = process.env.OPENCLAW_LOG_FILE;
+      if (!resolvedLogFile) {
+        try {
+          const fs = await import("node:fs");
+          // Check supervisor stderr log (where diagnostic output goes)
+          const supervisorErrLog = "/var/log/opencore.err.log";
+          if (fs.existsSync(supervisorErrLog)) {
+            resolvedLogFile = supervisorErrLog;
+          } else {
+            // Fall back to structured log file
+            const { getResolvedLoggerSettings } = await import("../logging/logger.js");
+            resolvedLogFile = getResolvedLoggerSettings().file;
+          }
+        } catch {
+          resolvedLogFile = "/var/log/opencore.err.log";
+        }
+      }
+      params.log.warn(`[log-monitor] watching: ${resolvedLogFile}`);
       logMonitorHandle = startLogMonitor(params.cfg.logMonitor, {
-        logFile: process.env.OPENCLAW_LOG_FILE || "/var/log/opencore.err.log",
+        logFile: resolvedLogFile,
         sessionKey: monitorSessionKey,
         deliveryChannel: deliveryTo ? "telegram" : undefined,
         deliveryTo,
