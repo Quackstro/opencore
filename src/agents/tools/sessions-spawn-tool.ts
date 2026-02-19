@@ -1,9 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
-import type { AnyAgentTool } from "./common.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { spawnSubagentDirect } from "../subagent-spawn.js";
-import { callGateway } from "../../gateway/call.js";
+import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 
 const SessionsSpawnToolSchema = Type.Object({
@@ -81,32 +80,6 @@ export function createSessionsSpawnTool(opts?: {
           requesterAgentIdOverride: opts?.requesterAgentIdOverride,
         },
       );
-
-      // Deliver confirmation directly so the LLM doesn't need another turn
-      if (result.status === "accepted" && opts?.agentChannel && opts?.agentTo) {
-        const targetAgentName = requestedAgentId || "sub-agent";
-        const confirmationText = `✅ Task delegated to **${targetAgentName}**. Results will be delivered when complete.`;
-        try {
-          await callGateway({
-            method: "send",
-            params: {
-              channel: opts.agentChannel,
-              to: opts.agentTo,
-              accountId: opts.agentAccountId,
-              threadId: opts.agentThreadId != null ? String(opts.agentThreadId) : undefined,
-              text: confirmationText,
-            },
-            timeoutMs: 10_000,
-          });
-          return jsonResult({
-            ...result,
-            confirmationDelivered: true,
-            instruction: "Confirmation already sent to user. Reply ONLY: NO_REPLY",
-          });
-        } catch {
-          // Fall through to normal result if direct send fails
-        }
-      }
 
       return jsonResult(result);
     },
