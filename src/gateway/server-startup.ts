@@ -200,7 +200,7 @@ export async function startGatewaySidecars(params: {
         const allowFromPath = `${homeDir}/.openclaw/credentials/telegram-allowFrom.json`;
         if (fs.existsSync(allowFromPath)) {
           const data = JSON.parse(fs.readFileSync(allowFromPath, "utf-8")) as { allowFrom?: string[] };
-          if (data.allowFrom?.[0]) deliveryTo = data.allowFrom[0];
+          if (data.allowFrom?.[0]) {deliveryTo = data.allowFrom[0];}
         }
       } catch {
         // best-effort

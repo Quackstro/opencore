@@ -1178,21 +1178,21 @@ export const registerTelegramHandlers = ({
       // Plugin message handlers (e.g., wallet onboarding passphrase input)
       // Checked before LLM dispatch; first non-null result wins.
       {
-        const rawText = (msg.text ?? msg.caption ?? "").trim();
+        const rawText = (event.msg.text ?? event.msg.caption ?? "").trim();
         if (rawText) {
           try {
             const pluginMsgResult = await runMessageHandlers({
-              chatId: String(chatId),
+              chatId: String(event.chatId),
               text: rawText,
-              messageId: String(msg.message_id),
+              messageId: String(event.msg.message_id),
               accountId,
-              message: msg,
-              chat: { id: chatId },
+              message: event.msg,
+              chat: { id: event.chatId },
             });
             if (pluginMsgResult) {
               // Delete user message if requested (e.g., passphrase security)
               if (pluginMsgResult.deleteMessageId) {
-                bot.api.deleteMessage(chatId, msg.message_id).catch(() => {});
+                bot.api.deleteMessage(event.chatId, event.msg.message_id).catch(() => {});
               }
               // If text is empty, the handler handled it silently (e.g., workflow
               // engine already rendered via its own adapter). Just stop the pipeline.
@@ -1212,7 +1212,7 @@ export const registerTelegramHandlers = ({
               await withTelegramApiErrorLogging({
                 operation: "sendMessage",
                 runtime,
-                fn: () => bot.api.sendMessage(chatId, pluginMsgResult.text, replyOpts),
+                fn: () => bot.api.sendMessage(event.chatId, pluginMsgResult.text, replyOpts),
               });
               return;
             }
