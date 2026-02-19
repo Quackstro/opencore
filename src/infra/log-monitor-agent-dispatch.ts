@@ -61,6 +61,10 @@ export interface PendingApproval {
   createdAt: number;
   expiresAt: number;
   opts: AgentDispatchOptions;
+  /** Telegram message ID of the approval request (for editing on expiry) */
+  telegramMessageId?: string;
+  /** Telegram chat ID where the approval was sent */
+  telegramChatId?: string;
 }
 
 const pendingApprovals = new Map<string, PendingApproval>();
@@ -229,19 +233,23 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
       opts.deps.logger?.info?.(
         `log-monitor: approval request ${id} expired for ${opts.issue.signature}`,
       );
-      // Notify user that the approval expired
-      const expiryText = `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
-        `**Issue:** ${expired.issueMessage}\n` +
-        `The approval window closed without action. If the error persists, a new approval will be requested.`;
-      if (opts.deps.deliveryChannel === "telegram" && opts.deps.deliveryTo) {
+      // Edit the original approval message to show expired state (remove buttons)
+      if (expired.telegramMessageId && expired.telegramChatId) {
+        const expiredText = `⏰ **Healing Approval Expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `**Issue:** ${expired.issueMessage}\n` +
+          `**Severity:** ${expired.severity}\n\n` +
+          `_The approval window closed. If the error persists, a new request will be sent._`;
         import("../telegram/send.js")
-          .then(({ sendMessageTelegram }) => {
-            void sendMessageTelegram(opts.deps.deliveryTo!, expiryText, {
+          .then(({ editMessageTelegram }) => {
+            void editMessageTelegram(expired.telegramChatId!, expired.telegramMessageId!, expiredText, {
               accountId: opts.deps.deliveryAccountId,
             });
           })
           .catch(() => {});
       } else if (opts.deps.sessionKey) {
+        const expiryText = `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `**Issue:** ${expired.issueMessage}\n` +
+          `The approval window closed. If the error persists, a new request will be sent.`;
         import("./system-events.js")
           .then(({ enqueueSystemEvent }) => {
             enqueueSystemEvent(expiryText, { sessionKey: opts.deps.sessionKey! });
@@ -291,10 +299,17 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
   if (deps.deliveryChannel === "telegram" && deps.deliveryTo) {
     import("../telegram/send.js")
       .then(({ sendMessageTelegram }) => {
-        void sendMessageTelegram(deps.deliveryTo!, text, {
+        return sendMessageTelegram(deps.deliveryTo!, text, {
           accountId: deps.deliveryAccountId,
           buttons,
         });
+      })
+      .then((result) => {
+        // Store message ID for editing on expiry/approval
+        if (result?.messageId) {
+          pending.telegramMessageId = String(result.messageId);
+          pending.telegramChatId = deps.deliveryTo;
+        }
       })
       .catch(() => {
         // Fall back to system event
@@ -305,6 +320,25 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
 
   // Fallback: system event (no button support)
   fallbackToSystemEvent(text, pending, deps);
+}
+
+function editApprovalMessage(pending: PendingApproval, statusLine: string): void {
+  if (!pending.telegramMessageId || !pending.telegramChatId) return;
+  const severityEmoji =
+    pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const updatedText = [
+    statusLine,
+    "",
+    `${severityEmoji} **Issue:** ${pending.issueMessage}`,
+    `**Severity:** ${pending.severity}`,
+  ].join("\n");
+  import("../telegram/send.js")
+    .then(({ editMessageTelegram }) => {
+      void editMessageTelegram(pending.telegramChatId!, pending.telegramMessageId!, updatedText, {
+        accountId: pending.opts.deps.deliveryAccountId,
+      });
+    })
+    .catch(() => {});
 }
 
 function fallbackToSystemEvent(text: string, pending: PendingApproval, deps: LogMonitorDeps): void {
@@ -341,6 +375,9 @@ export async function approveHealingDispatch(approvalId: string): Promise<{
     approvalTimers.delete(approvalId);
   }
 
+  // Edit approval message to show approved state
+  editApprovalMessage(pending, "✅ **Approved** — healing agent dispatched");
+
   // Dispatch with gate bypassed
   const result = await dispatchHealingAgentInternal(pending.opts);
   return { approved: true, dispatched: result.dispatched, reason: result.reason };
@@ -361,6 +398,9 @@ export function rejectHealingDispatch(approvalId: string): { rejected: boolean; 
     clearTimeout(timer);
     approvalTimers.delete(approvalId);
   }
+
+  // Edit approval message to show rejected state
+  editApprovalMessage(pending, "🚫 **Rejected** — healing agent not dispatched");
 
   pending.opts.deps.logger?.info?.(
     `log-monitor: healing dispatch rejected by user for ${pending.issueSignature}`,
