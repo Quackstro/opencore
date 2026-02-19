@@ -229,6 +229,25 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
       opts.deps.logger?.info?.(
         `log-monitor: approval request ${id} expired for ${opts.issue.signature}`,
       );
+      // Notify user that the approval expired
+      const expiryText = `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
+        `**Issue:** ${expired.issueMessage}\n` +
+        `The approval window closed without action. If the error persists, a new approval will be requested.`;
+      if (opts.deps.deliveryChannel === "telegram" && opts.deps.deliveryTo) {
+        import("../telegram/send.js")
+          .then(({ sendMessageTelegram }) => {
+            void sendMessageTelegram(opts.deps.deliveryTo!, expiryText, {
+              accountId: opts.deps.deliveryAccountId,
+            });
+          })
+          .catch(() => {});
+      } else if (opts.deps.sessionKey) {
+        import("./system-events.js")
+          .then(({ enqueueSystemEvent }) => {
+            enqueueSystemEvent(expiryText, { sessionKey: opts.deps.sessionKey! });
+          })
+          .catch(() => {});
+      }
     }
   }, timeoutSeconds * 1000);
   timer.unref();
