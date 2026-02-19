@@ -199,9 +199,31 @@ export async function startGatewaySidecars(params: {
       // Use the default agent's session key so system events are delivered
       const defaultAgent = params.cfg.agents?.list?.find((a: { default?: boolean }) => a.default) ?? params.cfg.agents?.list?.[0];
       const monitorSessionKey = defaultAgent ? `agent:${defaultAgent.id}:main` : undefined;
+      // Resolve Telegram delivery target from bindings
+      const defaultBinding = params.cfg.bindings?.find(
+        (b: { agentId?: string }) => b.agentId === defaultAgent?.id,
+      ) as { agentId?: string; match?: { channel?: string; accountId?: string } } | undefined;
+      const deliveryAccountId = defaultBinding?.match?.accountId;
+      // Read paired user from Telegram pairing store
+      let deliveryTo: string | undefined;
+      try {
+        const pairingPath = `${process.env.HOME || "/home/clawdbot"}/.openclaw/telegram/paired-users.json`;
+        const fs = await import("node:fs");
+        if (fs.existsSync(pairingPath)) {
+          const paired = JSON.parse(fs.readFileSync(pairingPath, "utf-8")) as Record<string, unknown>;
+          // Use the first paired user ID
+          const firstKey = Object.keys(paired)[0];
+          if (firstKey) deliveryTo = firstKey;
+        }
+      } catch {
+        // best-effort
+      }
       logMonitorHandle = startLogMonitor(params.cfg.logMonitor, {
         logFile: process.env.OPENCLAW_LOG_FILE || "/var/log/opencore.err.log",
         sessionKey: monitorSessionKey,
+        deliveryChannel: deliveryTo ? "telegram" : undefined,
+        deliveryTo,
+        deliveryAccountId,
         logger: {
           info: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
           warn: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),

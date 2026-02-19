@@ -242,6 +242,12 @@ export interface LogMonitorDeps {
   logFile?: string;
   /** Session key for system events. If not provided, skips event delivery. */
   sessionKey?: string;
+  /** Delivery channel for direct messaging (e.g. "telegram"). */
+  deliveryChannel?: string;
+  /** Delivery target (e.g. Telegram chat ID). */
+  deliveryTo?: string;
+  /** Account ID for multi-account channels. */
+  deliveryAccountId?: string;
   logger?: { info: (msg: string) => void; warn: (msg: string) => void };
 }
 

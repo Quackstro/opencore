@@ -245,11 +245,12 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
 }
 
 function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps): void {
-  if (!deps.sessionKey) {
+  if (!deps.sessionKey && !deps.deliveryTo) {
     return;
   }
   const severityEmoji =
     pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const shortId = pending.id.slice(0, 8);
   const text = [
     `${severityEmoji} **Healing Agent Approval Required**`,
     "",
@@ -257,15 +258,42 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
     `**Severity:** ${pending.severity}`,
     `**Proposed action:** ${pending.task}`,
     "",
-    `Approve: \`/heal approve ${pending.id}\``,
-    `Reject: \`/heal reject ${pending.id}\``,
-    "",
     `_Expires in ${Math.round((pending.expiresAt - pending.createdAt) / 1000)}s_`,
   ].join("\n");
 
+  const buttons = [
+    [
+      { text: `✅ Approve ${shortId}`, callback_data: `/heal approve ${shortId}` },
+      { text: `🚫 Reject ${shortId}`, callback_data: `/heal reject ${shortId}` },
+    ],
+  ];
+
+  // Try direct Telegram delivery with inline buttons first
+  if (deps.deliveryChannel === "telegram" && deps.deliveryTo) {
+    import("../telegram/send.js")
+      .then(({ sendMessageTelegram }) => {
+        void sendMessageTelegram(deps.deliveryTo!, text, {
+          accountId: deps.deliveryAccountId,
+          buttons,
+        });
+      })
+      .catch(() => {
+        // Fall back to system event
+        fallbackToSystemEvent(text, pending, deps);
+      });
+    return;
+  }
+
+  // Fallback: system event (no button support)
+  fallbackToSystemEvent(text, pending, deps);
+}
+
+function fallbackToSystemEvent(text: string, pending: PendingApproval, deps: LogMonitorDeps): void {
+  if (!deps.sessionKey) return;
+  const fallbackText = text + `\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
   import("./system-events.js")
     .then(({ enqueueSystemEvent }) => {
-      enqueueSystemEvent(text, { sessionKey: deps.sessionKey! });
+      enqueueSystemEvent(fallbackText, { sessionKey: deps.sessionKey! });
     })
     .catch(() => {
       // Ignore import failure
