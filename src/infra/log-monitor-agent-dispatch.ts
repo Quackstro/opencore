@@ -516,14 +516,15 @@ function buildHealingSystemPrompt(context?: AgentContext): string {
 Your job is to diagnose and fix the detected issue.
 
 Severity: ${severity}
-${severity === "high" ? "You may restart services if necessary." : "Avoid restarting services unless absolutely required."}
 
 Safety constraints:
+- Do NOT restart the gateway or services yourself — if a restart is needed, say "restart required" or "restart recommended" in your report and the user will be offered a restart button
 - Do NOT send messages to users
 - Do NOT modify wallet or brain data
 - Do NOT install new packages
 - Report your findings clearly in your final message
 - If you cannot fix the issue, explain what you found and recommend next steps
+- If the issue is benign, transient, or self-resolved, say so clearly (e.g. "no action needed", "self-resolved")
 `;
 }
 
