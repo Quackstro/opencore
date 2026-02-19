@@ -233,8 +233,9 @@ const GenericErrorHandler: LogMonitorHandler = {
         },
       };
     }
-    // Low occurrence — suppress
-    return { result: "fixed" };
+    // Not enough occurrences yet — return failed so the auto-resolve
+    // cooldown isn't set and the handler can re-evaluate on next surface
+    return { result: "failed" };
   },
 };
 

@@ -408,8 +408,6 @@ async function resolveIssue(
   deps: LogMonitorDeps,
   agentDispatchConfig?: AgentDispatchConfig,
 ): Promise<void> {
-  registry.markAutoResolveAttempt(issue.signature);
-
   const issueRecord = registry.getIssue(issue.signature);
   const occurrences = issueRecord?.occurrences ?? 0;
 
@@ -420,6 +418,12 @@ async function resolveIssue(
     deps.logger?.info?.(
       `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result} (occurrences=${occurrences})`,
     );
+
+    // Only mark auto-resolve cooldown if the handler actually resolved it
+    // (not for "failed" or "needs-*" results that need re-evaluation)
+    if (result.result === "fixed") {
+      registry.markAutoResolveAttempt(issue.signature);
+    }
 
     if (resolution.result === "needs-agent") {
       const config = { ...DEFAULT_AGENT_DISPATCH, ...agentDispatchConfig };
