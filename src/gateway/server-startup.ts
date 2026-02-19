@@ -196,9 +196,12 @@ export async function startGatewaySidecars(params: {
   if (params.cfg.logMonitor?.enabled) {
     try {
       const { startLogMonitor } = await import("../infra/log-monitor.js");
+      // Use the default agent's session key so system events are delivered
+      const defaultAgent = params.cfg.agents?.list?.find((a: { default?: boolean }) => a.default) ?? params.cfg.agents?.list?.[0];
+      const monitorSessionKey = defaultAgent ? `agent:${defaultAgent.id}:main` : undefined;
       logMonitorHandle = startLogMonitor(params.cfg.logMonitor, {
         logFile: process.env.OPENCLAW_LOG_FILE || "/var/log/opencore.err.log",
-        sessionKey: "system",
+        sessionKey: monitorSessionKey,
         logger: {
           info: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
           warn: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
