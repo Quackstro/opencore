@@ -14,6 +14,7 @@ import { runCrashRecoveryCheck } from "./crash-recovery.js";
 import { emitDiagnosticEvent } from "./diagnostic-events.js";
 import { dispatchHealingAgent } from "./log-monitor-agent-dispatch.js";
 import { startDiagnosticCollector } from "./log-monitor-diagnostics.js";
+import { startSecurityAuditCollector } from "./log-monitor-security-audit.js";
 import { normalizeResolution, runHandlers, type HandlerContext } from "./log-monitor-handlers.js";
 import {
   createIssueRegistry,
@@ -45,6 +46,7 @@ const DEFAULTS: Required<LogMonitorConfig> = {
   autoResolve: true,
   crashRecovery: true,
   agentDispatch: DEFAULT_AGENT_DISPATCH,
+  securityAudit: { enabled: false },
 };
 
 // ============================================================================
@@ -291,8 +293,8 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   // Main config (mutable for updateConfig)
   let currentConfig = merged;
 
-  // Start diagnostic event collector to capture real-time events
-  const stopDiagnostics = startDiagnosticCollector((issue) => {
+  // Shared issue callback for all collectors
+  const handleCollectedIssue = (issue: { signature: string; category: IssueCategory; message: string }) => {
     const decision = registry.record(issue);
     if (decision.shouldSurface) {
       surfaceIssue(issue.signature, issue.message, deps);
@@ -300,7 +302,19 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
     if (decision.shouldAutoResolve) {
       void resolveIssue(issue, registry, handlerCtx, deps, currentConfig.agentDispatch);
     }
-  });
+  };
+
+  // Start diagnostic event collector to capture real-time events
+  const stopDiagnostics = startDiagnosticCollector(handleCollectedIssue);
+
+  // Start security audit collector if enabled
+  const secAuditCfg = cfg.securityAudit;
+  const stopSecurityAudit = secAuditCfg?.enabled
+    ? startSecurityAuditCollector(handleCollectedIssue, {
+        intervalMs: secAuditCfg.intervalMs,
+        acknowledgedChecks: secAuditCfg.acknowledgedChecks,
+      })
+    : undefined;
 
   function tick() {
     if (!deps.logFile) {
@@ -354,6 +368,7 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
     stop() {
       clearInterval(interval);
       stopDiagnostics();
+      stopSecurityAudit?.();
       registry.flush();
       deps.logger?.info?.("log-monitor: stopped");
     },

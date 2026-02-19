@@ -14,7 +14,7 @@ import { loadJsonFile, saveJsonFile } from "./json-file.js";
 // Types
 // ============================================================================
 
-export type IssueCategory = "network" | "crash" | "stuck-session" | "error" | "unknown";
+export type IssueCategory = "network" | "crash" | "stuck-session" | "error" | "security" | "unknown";
 
 export interface IssueRecord {
   signature: string;

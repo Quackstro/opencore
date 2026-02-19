@@ -143,12 +143,7 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
     }
 
     if (parsed.action === "apply") {
-      return {
-        shouldContinue: false,
-        reply: {
-          text: "🔧 Apply fix is not yet implemented — review the full report and apply manually, or ask me to help.",
-        },
-      };
+      return await handleHealApply(params, parsed.id);
     }
 
     if (parsed.action === "test") {
@@ -249,6 +244,110 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 
   return null;
 };
+
+/**
+ * Apply a fix from a healing report by spawning a sub-agent.
+ */
+async function handleHealApply(
+  params: Parameters<CommandHandler>[0],
+  id: string,
+): Promise<CommandHandlerResult> {
+  const { loadReport, getUnacknowledgedReports } = await import("../../infra/healing-reports.js");
+
+  // Resolve report by exact or prefix match
+  let report = loadReport(id);
+  if (!report) {
+    const unacked = getUnacknowledgedReports();
+    const match = unacked.find((r) => r.id.startsWith(id));
+    if (match) report = match;
+  }
+  if (!report) {
+    return { shouldContinue: false, reply: { text: `❌ Report \`${id}\` not found.` } };
+  }
+  if (!report.hasFix) {
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Report \`${report.id}\` has no fix to apply.\n\n` +
+          `The healing agent diagnosed the issue but didn't propose a concrete fix. ` +
+          `You can ask me to help fix it based on the report:\n\`/heal report ${report.id}\``,
+      },
+    };
+  }
+
+  // Dispatch a healing agent with the apply-fix task
+  const task = [
+    `Apply the following fix from healing report ${report.id}:`,
+    "",
+    `**Issue:** ${report.issueSignature}`,
+    `**Fix:** ${report.fixDescription ?? "See full report below"}`,
+    "",
+    "--- Full Report ---",
+    report.fullReport,
+    "--- End Report ---",
+    "",
+    "Instructions:",
+    "- Read the report and understand the proposed fix",
+    "- Apply the fix (edit files, update config, etc.)",
+    "- Verify the fix works (check logs, run tests if applicable)",
+    "- If a restart is needed, say 'restart required' — do NOT restart services yourself",
+    "- Report what you did and the result",
+  ].join("\n");
+
+  try {
+    const { dispatchHealingAgent } = await import("../../infra/log-monitor-agent-dispatch.js");
+    const result = await dispatchHealingAgent({
+      issue: {
+        signature: report.issueSignature,
+        category: "error",
+        occurrences: 0,
+        message: `Apply fix: ${report.fixDescription ?? report.issueSignature}`,
+      },
+      recentLogLines: [],
+      agentContext: {
+        task,
+        severity: report.severity,
+      },
+      config: {
+        enabled: true,
+        timeoutSeconds: 600,
+        approvalGate: { mode: "off" }, // Already approved by clicking /heal apply
+      },
+      registry: null as never, // Not needed for direct dispatch
+      deps: {
+        sessionKey: params.sessionKey,
+        deliveryChannel: "telegram",
+        deliveryTo: params.command?.senderId,
+        deliveryAccountId: params.ctx?.AccountId,
+        logger: undefined,
+      },
+    });
+
+    if (result.dispatched) {
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🔧 **Applying fix** from report \`${report.id}\`\n\n` +
+            `**Fix:** ${report.fixDescription ?? "Applying fix from report..."}\n\n` +
+            `A healing agent has been dispatched. You'll be notified when it completes.`,
+        },
+      };
+    }
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Failed to dispatch fix agent: ${result.reason ?? "unknown"}`,
+      },
+    };
+  } catch (err) {
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Failed to spawn fix agent: ${String(err)}`,
+      },
+    };
+  }
+}
 
 /**
  * Show the full report for a healing report ID.
