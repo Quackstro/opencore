@@ -155,6 +155,24 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
 
+  // Start log monitor (self-healing agent dispatch).
+  if (params.cfg.logMonitor?.enabled) {
+    try {
+      const { startLogMonitor } = await import("../infra/log-monitor.js");
+      const handle = startLogMonitor(params.cfg.logMonitor, {
+        logger: params.log as any,
+        sessionKey: "system:log-monitor",
+      });
+      params.log.warn(
+        `log monitor started (agentDispatch=${!!params.cfg.logMonitor.agentDispatch?.enabled})`,
+      );
+      // Store handle for potential cleanup — currently fire-and-forget
+      void handle;
+    } catch (err) {
+      params.log.warn(`log monitor failed to start: ${String(err)}`);
+    }
+  }
+
   // Resurface any unacknowledged healing reports from before the restart.
   if (!skipChannels) {
     setTimeout(async () => {
