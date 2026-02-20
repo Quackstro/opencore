@@ -245,6 +245,42 @@ export async function executePluginCommand(params: {
 }): Promise<PluginCommandResult> {
   const { command, args, senderId, channel, isAuthorizedSender, commandBody, config } = params;
 
+  // Try workflow intercept for interactive (no-args) commands
+  try {
+    const { tryWorkflowIntercept } = await import("./workflow-intercept.js");
+    // Parse subcommand from args (e.g. "send 10 to D..." → subCommand="send", remaining args)
+    const argParts = (args ?? "").trim().split(/\s+/);
+    const subCommand = argParts[0]?.toLowerCase() || undefined;
+    const remainingArgs = argParts.slice(1).join(" ").trim();
+
+    const workflowResult = await tryWorkflowIntercept({
+      commandName: command.name,
+      subCommand,
+      args: remainingArgs,
+      ctx: {
+        senderId,
+        channel,
+        channelId: params.channelId,
+        isAuthorizedSender,
+        args: sanitizeArgs(args),
+        commandBody,
+        config,
+        from: params.from,
+        to: params.to,
+        accountId: params.accountId,
+        messageThreadId: params.messageThreadId,
+        chatId: params.chatId,
+        messageId: params.messageId,
+      },
+    });
+    if (workflowResult) {
+      logVerbose(`Plugin command /${command.name} routed to workflow engine`);
+      return workflowResult;
+    }
+  } catch {
+    // Workflow intercept failed — fall through to regular handler
+  }
+
   // Check authorization
   const requireAuth = command.requireAuth !== false; // Default to true
   if (requireAuth && !isAuthorizedSender) {

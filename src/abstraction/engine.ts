@@ -163,6 +163,10 @@ export class WorkflowEngine {
     return this.definitions.get(id);
   }
 
+  hasWorkflow(id: string): boolean {
+    return this.definitions.has(id);
+  }
+
   async startWorkflow(
     workflowId: string,
     userId: string,
