@@ -541,6 +541,21 @@ export async function runAgentTurnWithFallback(params: {
       }
 
       defaultRuntime.error(`Embedded agent failed before reply: ${message}`);
+
+      // Emit diagnostic event so the log monitor can detect and act on agent failures.
+      try {
+        const { emitDiagnosticEvent } = await import("../../infra/diagnostic-events.js");
+        emitDiagnosticEvent({
+          type: "message.processed",
+          outcome: "error",
+          error: `Agent failed before reply: ${message}`,
+          channel: "internal",
+          durationMs: 0,
+        });
+      } catch {
+        // best-effort
+      }
+
       const safeMessage = isTransientHttp
         ? sanitizeUserFacingText(message, { errorContext: true })
         : message;
