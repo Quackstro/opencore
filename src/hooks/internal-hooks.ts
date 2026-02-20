@@ -8,9 +8,16 @@
 import type { RoutingContext, RoutingResult } from "../agents/skills/routing/types.js";
 import type { SkillEntry } from "../agents/skills/types.js";
 import type { WorkspaceBootstrapFile } from "../agents/workspace.js";
+import type { CliDeps } from "../cli/deps.js";
 import type { OpenClawConfig } from "../config/config.js";
 
-export type InternalHookEventType = "command" | "session" | "agent" | "gateway" | "skill";
+export type InternalHookEventType =
+  | "command"
+  | "session"
+  | "agent"
+  | "gateway"
+  | "skill"
+  | "message";
 
 export type AgentBootstrapHookContext = {
   workspaceDir: string;
@@ -45,6 +52,72 @@ export type SkillFilterHookEvent = InternalHookEvent & {
   type: "skill";
   action: "filter";
   context: SkillFilterHookContext;
+};
+
+export type GatewayStartupHookContext = {
+  cfg?: OpenClawConfig;
+  deps?: CliDeps;
+  workspaceDir?: string;
+};
+
+export type GatewayStartupHookEvent = InternalHookEvent & {
+  type: "gateway";
+  action: "startup";
+  context: GatewayStartupHookContext;
+};
+
+// ============================================================================
+// Message Hook Events
+// ============================================================================
+
+export type MessageReceivedHookContext = {
+  /** Sender identifier (e.g., phone number, user ID) */
+  from: string;
+  /** Message content */
+  content: string;
+  /** Unix timestamp when the message was received */
+  timestamp?: number;
+  /** Channel identifier (e.g., "telegram", "whatsapp") */
+  channelId: string;
+  /** Provider account ID for multi-account setups */
+  accountId?: string;
+  /** Conversation/chat ID */
+  conversationId?: string;
+  /** Message ID from the provider */
+  messageId?: string;
+  /** Additional provider-specific metadata */
+  metadata?: Record<string, unknown>;
+};
+
+export type MessageReceivedHookEvent = InternalHookEvent & {
+  type: "message";
+  action: "received";
+  context: MessageReceivedHookContext;
+};
+
+export type MessageSentHookContext = {
+  /** Recipient identifier */
+  to: string;
+  /** Message content */
+  content: string;
+  /** Whether the message was sent successfully */
+  success: boolean;
+  /** Error message if sending failed */
+  error?: string;
+  /** Channel identifier (e.g., "telegram", "whatsapp") */
+  channelId: string;
+  /** Provider account ID for multi-account setups */
+  accountId?: string;
+  /** Conversation/chat ID */
+  conversationId?: string;
+  /** Message ID returned by the provider */
+  messageId?: string;
+};
+
+export type MessageSentHookEvent = InternalHookEvent & {
+  type: "message";
+  action: "sent";
+  context: MessageSentHookContext;
 };
 
 export interface InternalHookEvent {
@@ -204,9 +277,6 @@ export function isAgentBootstrapEvent(event: InternalHookEvent): event is AgentB
 
 /**
  * Type guard for skill:filter events.
- *
- * @param event - The event to check
- * @returns true if the event is a SkillFilterHookEvent
  */
 export function isSkillFilterEvent(event: InternalHookEvent): event is SkillFilterHookEvent {
   if (event.type !== "skill" || event.action !== "filter") {
@@ -227,10 +297,6 @@ export function isSkillFilterEvent(event: InternalHookEvent): event is SkillFilt
 
 /**
  * Create a skill:filter hook event.
- *
- * @param sessionKey - The session key
- * @param context - The skill filter context
- * @returns A SkillFilterHookEvent
  */
 export function createSkillFilterHookEvent(
   sessionKey: string,
@@ -244,4 +310,40 @@ export function createSkillFilterHookEvent(
     timestamp: new Date(),
     messages: [],
   };
+}
+
+export function isGatewayStartupEvent(event: InternalHookEvent): event is GatewayStartupHookEvent {
+  if (event.type !== "gateway" || event.action !== "startup") {
+    return false;
+  }
+  const context = event.context as GatewayStartupHookContext | null;
+  return Boolean(context && typeof context === "object");
+}
+
+export function isMessageReceivedEvent(
+  event: InternalHookEvent,
+): event is MessageReceivedHookEvent {
+  if (event.type !== "message" || event.action !== "received") {
+    return false;
+  }
+  const context = event.context as Partial<MessageReceivedHookContext> | null;
+  if (!context || typeof context !== "object") {
+    return false;
+  }
+  return typeof context.from === "string" && typeof context.channelId === "string";
+}
+
+export function isMessageSentEvent(event: InternalHookEvent): event is MessageSentHookEvent {
+  if (event.type !== "message" || event.action !== "sent") {
+    return false;
+  }
+  const context = event.context as Partial<MessageSentHookContext> | null;
+  if (!context || typeof context !== "object") {
+    return false;
+  }
+  return (
+    typeof context.to === "string" &&
+    typeof context.channelId === "string" &&
+    typeof context.success === "boolean"
+  );
 }

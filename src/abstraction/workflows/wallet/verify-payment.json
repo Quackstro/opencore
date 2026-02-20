@@ -1,0 +1,59 @@
+{
+  "id": "wallet-verify-payment",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-invoice-id",
+  "steps": {
+    "enter-invoice-id": {
+      "type": "text-input",
+      "content": "🔍 Verify Payment\n\nEnter the invoice ID to verify:",
+      "placeholder": "Invoice ID",
+      "validation": {
+        "minLength": 1,
+        "errorMessage": "Please enter an invoice ID."
+      },
+      "next": "enter-txid"
+    },
+    "enter-txid": {
+      "type": "text-input",
+      "content": "Enter the transaction ID (txid):",
+      "placeholder": "Transaction hash",
+      "validation": {
+        "minLength": 64,
+        "maxLength": 64,
+        "pattern": "^[a-fA-F0-9]{64}$",
+        "errorMessage": "Please enter a valid 64-character transaction hash."
+      },
+      "next": "enter-amount"
+    },
+    "enter-amount": {
+      "type": "text-input",
+      "content": "Enter the amount that was sent (in DOGE):",
+      "placeholder": "Amount in DOGE",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+        "errorMessage": "Please enter a valid amount."
+      },
+      "next": "verify"
+    },
+    "verify": {
+      "type": "info",
+      "content": "Verifying payment...",
+      "toolCall": {
+        "name": "wallet_verify_payment",
+        "paramMap": {
+          "invoiceId": "$data.enter-invoice-id.input",
+          "txid": "$data.enter-txid.input",
+          "amount": "$data.enter-amount.input"
+        }
+      },
+      "next": "complete"
+    },
+    "complete": {
+      "type": "info",
+      "content": "✅ Payment verification complete. Check above for results.",
+      "terminal": true
+    }
+  }
+}

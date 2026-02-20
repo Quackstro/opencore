@@ -7,7 +7,6 @@ type ParsedHealCommand =
   | { ok: true; action: "approve"; id: string }
   | { ok: true; action: "reject"; id: string }
   | { ok: true; action: "list" }
-  | { ok: true; action: "history"; offset: number; search?: string }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -23,21 +22,18 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   if (!rest) {
     return {
       ok: false,
-      error: [
-        "🩺 **Self-Healing Agent**",
-        "",
-        "Monitors logs for errors, spawns AI agents to diagnose and fix issues automatically. Issues go through an approval gate before agents are dispatched.",
-        "",
-        "**Commands:**",
-        "• `/heal list` — pending approval requests",
-        "• `/heal history` — past healing reports (paginated)",
-        "• `/heal search <query>` — search reports by keyword",
-        "• `/heal approve <id>` — approve a healing agent dispatch",
-        "• `/heal reject <id>` — reject a pending dispatch",
-        "• `/heal report <id>` — view full report details",
-        "• `/heal dismiss <id>` — acknowledge/dismiss a report",
-        "• `/heal test [low|medium|high]` — run E2E pipeline test",
-      ].join("\n"),
+      error:
+        "🩺 **Self-Healing Pipeline**\n" +
+        "Monitors logs and diagnostic events for errors, auto-resolves known patterns, " +
+        "and dispatches AI healing agents for unresolved issues.\n\n" +
+        "**Commands:**\n" +
+        "• `/heal list` — show pending approval requests\n" +
+        "• `/heal approve <id>` — approve a healing agent dispatch\n" +
+        "• `/heal reject <id>` — reject a pending request\n" +
+        "• `/heal test [low|medium|high]` — inject a simulated error for E2E testing\n" +
+        "• `/heal report <id>` — view full healing report\n" +
+        "• `/heal dismiss <id>` — acknowledge and close a report\n" +
+        "• `/heal apply <id>` — apply a suggested fix (experimental)",
     };
   }
 
@@ -46,19 +42,6 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
 
   if (action === "list" || action === "ls" || action === "pending") {
     return { ok: true, action: "list" };
-  }
-
-  if (action === "history" || action === "log" || action === "past") {
-    const offset = tokens[1] ? parseInt(tokens[1], 10) : 0;
-    return { ok: true, action: "history", offset: !isNaN(offset) ? Math.max(0, offset) : 0 };
-  }
-
-  if (action === "search" || action === "find" || action === "grep") {
-    const query = tokens.slice(1).join(" ").trim();
-    if (!query) {
-      return { ok: false, error: "Usage: /heal search <query>" };
-    }
-    return { ok: true, action: "history", offset: 0, search: query };
   }
 
   if (action === "test" || action === "simulate") {
@@ -119,7 +102,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   return {
     ok: false,
     error:
-      "Usage: /heal list | /heal history [offset] | /heal search <query> | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
+      "Usage: /heal approve <id> | /heal reject <id> | /heal list | /heal test [low|medium|high]",
   };
 }
 
@@ -160,16 +143,7 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
     }
 
     if (parsed.action === "apply") {
-      return {
-        shouldContinue: false,
-        reply: {
-          text: "🔧 Apply fix is not yet implemented — review the full report and apply manually, or ask me to help.",
-        },
-      };
-    }
-
-    if (parsed.action === "history") {
-      return await handleHealHistory(parsed.offset, parsed.search);
+      return await handleHealApply(params, parsed.id);
     }
 
     if (parsed.action === "test") {
@@ -234,8 +208,8 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
         shouldContinue: false,
         reply: {
           text: result.dispatched
-            ? `✅ Healing agent approved and dispatched for: ${match.issueMessage}`
-            : `⚠️ Approved but dispatch failed: ${result.reason}`,
+            ? `✅ Healing agent approved and dispatched for: ${match.issueMessage}\n\n📋 Report ID: \`${match.id.slice(0, 8)}\``
+            : `⚠️ Approved but dispatch failed: ${result.reason}\n\nID: \`${match.id.slice(0, 8)}\``,
         },
       };
     }
@@ -272,78 +246,107 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 };
 
 /**
- * Show history of all healing reports with offset-based pagination and optional search.
+ * Apply a fix from a healing report by spawning a sub-agent.
  */
-async function handleHealHistory(offset: number, search?: string): Promise<CommandHandlerResult> {
-  const PAGE_SIZE = 5;
-  const { getAllReports } = await import("../../infra/healing-reports.js");
+async function handleHealApply(
+  params: Parameters<CommandHandler>[0],
+  id: string,
+): Promise<CommandHandlerResult> {
+  const { loadReport, getUnacknowledgedReports } = await import("../../infra/healing-reports.js");
 
-  let allReports = getAllReports();
-
-  // Apply search filter if provided
-  if (search) {
-    const q = search.toLowerCase();
-    allReports = allReports.filter(
-      (r) =>
-        r.issueSignature.toLowerCase().includes(q) ||
-        r.tldr.toLowerCase().includes(q) ||
-        r.fullReport.toLowerCase().includes(q) ||
-        r.id.toLowerCase().startsWith(q),
-    );
+  // Resolve report by exact or prefix match
+  let report = loadReport(id);
+  if (!report) {
+    const unacked = getUnacknowledgedReports();
+    const match = unacked.find((r) => r.id.startsWith(id));
+    if (match) report = match;
+  }
+  if (!report) {
+    return { shouldContinue: false, reply: { text: `❌ Report \`${id}\` not found.` } };
+  }
+  if (!report.hasFix) {
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Report \`${report.id}\` has no fix to apply.\n\n` +
+          `The healing agent diagnosed the issue but didn't propose a concrete fix. ` +
+          `You can ask me to help fix it based on the report:\n\`/heal report ${report.id}\``,
+      },
+    };
   }
 
-  if (allReports.length === 0) {
-    const msg = search ? `No healing reports matching "${search}".` : "No healing reports found.";
-    return { shouldContinue: false, reply: { text: msg } };
+  // Dispatch a healing agent with the apply-fix task
+  const task = [
+    `Apply the following fix from healing report ${report.id}:`,
+    "",
+    `**Issue:** ${report.issueSignature}`,
+    `**Fix:** ${report.fixDescription ?? "See full report below"}`,
+    "",
+    "--- Full Report ---",
+    report.fullReport,
+    "--- End Report ---",
+    "",
+    "Instructions:",
+    "- Read the report and understand the proposed fix",
+    "- Apply the fix (edit files, update config, etc.)",
+    "- Verify the fix works (check logs, run tests if applicable)",
+    "- If a restart is needed, say 'restart required' — do NOT restart services yourself",
+    "- Report what you did and the result",
+  ].join("\n");
+
+  try {
+    const { dispatchHealingAgent } = await import("../../infra/log-monitor-agent-dispatch.js");
+    const result = await dispatchHealingAgent({
+      issue: {
+        signature: report.issueSignature,
+        category: "error",
+        occurrences: 0,
+        message: `Apply fix: ${report.fixDescription ?? report.issueSignature}`,
+      },
+      recentLogLines: [],
+      agentContext: {
+        task,
+        severity: report.severity,
+      },
+      config: {
+        enabled: true,
+        timeoutSeconds: 600,
+        approvalGate: { mode: "off" }, // Already approved by clicking /heal apply
+      },
+      registry: null as never, // Not needed for direct dispatch
+      deps: {
+        sessionKey: params.sessionKey,
+        deliveryChannel: "telegram",
+        deliveryTo: params.command?.senderId,
+        deliveryAccountId: params.ctx?.AccountId,
+        logger: undefined,
+      },
+    });
+
+    if (result.dispatched) {
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🔧 **Applying fix** from report \`${report.id}\`\n\n` +
+            `**Fix:** ${report.fixDescription ?? "Applying fix from report..."}\n\n` +
+            `A healing agent has been dispatched. You'll be notified when it completes.`,
+        },
+      };
+    }
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Failed to dispatch fix agent: ${result.reason ?? "unknown"}`,
+      },
+    };
+  } catch (err) {
+    return {
+      shouldContinue: false,
+      reply: {
+        text: `❌ Failed to spawn fix agent: ${String(err)}`,
+      },
+    };
   }
-
-  // Clamp offset
-  if (offset >= allReports.length) {
-    offset = Math.max(0, Math.floor((allReports.length - 1) / PAGE_SIZE) * PAGE_SIZE);
-  }
-
-  const page = Math.floor(offset / PAGE_SIZE) + 1;
-  const totalPages = Math.ceil(allReports.length / PAGE_SIZE);
-  const pageReports = allReports.slice(offset, offset + PAGE_SIZE);
-  const hasMore = allReports.length > offset + PAGE_SIZE;
-
-  const lines = pageReports.map((r) => {
-    const statusEmoji = r.success ? "✅" : "❌";
-    const severityEmoji = r.severity === "high" ? "🔴" : r.severity === "medium" ? "🟡" : "🟢";
-    const ackLabel = r.acknowledged ? "dismissed" : "active";
-    const date = r.completedAt.slice(0, 10);
-    const sigShort =
-      r.issueSignature.length > 35 ? `${r.issueSignature.slice(0, 35)}…` : r.issueSignature;
-    return `${statusEmoji}${severityEmoji} \`${r.id.slice(0, 8)}\` ${date} — ${sigShort} _(${ackLabel})_`;
-  });
-
-  const searchSuffix = search ? ` matching "${search}"` : "";
-  const header = `**Healing History** (page ${page}/${totalPages}, ${allReports.length} items${searchSuffix})`;
-
-  // Build navigation buttons
-  const navRow: Array<{ text: string; callback_data: string }> = [];
-  if (hasMore) {
-    const nextCmd = search
-      ? `/heal search ${search}` // search doesn't paginate via offset yet — show all matches
-      : `/heal history ${offset + PAGE_SIZE}`;
-    navRow.push({ text: "📜 Show More", callback_data: nextCmd });
-  }
-  navRow.push({ text: "🔍 Search", callback_data: "/heal search" });
-
-  // Report buttons for unacknowledged items on this page
-  const reportRows = pageReports
-    .filter((r) => !r.acknowledged)
-    .map((r) => [{ text: `📋 ${r.id.slice(0, 8)}`, callback_data: `/heal report ${r.id}` }]);
-
-  const buttons = [navRow, ...reportRows];
-
-  return {
-    shouldContinue: false,
-    reply: {
-      text: `${header}\n\n${lines.join("\n")}`,
-      channelData: { telegram: { buttons } },
-    },
-  };
 }
 
 /**

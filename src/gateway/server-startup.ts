@@ -1,6 +1,8 @@
 import type { CliDeps } from "../cli/deps.js";
 import type { loadConfig } from "../config/config.js";
 import type { loadOpenClawPlugins } from "../plugins/loader.js";
+import { initWorkflowEngine } from "../abstraction/bootstrap.js";
+import { registerWorkflowHooks } from "../abstraction/hooks.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import {
@@ -8,7 +10,11 @@ import {
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
 } from "../agents/model-selection.js";
-import { startGmailWatcher } from "../hooks/gmail-watcher.js";
+import { createOpenClawTools } from "../agents/openclaw-tools.js";
+import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
+import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
+import { resolveStateDir } from "../config/paths.js";
+import { startGmailWatcherWithLogs } from "../hooks/gmail-watcher-lifecycle.js";
 import {
   clearInternalHooks,
   createInternalHookEvent,
@@ -23,6 +29,8 @@ import {
   shouldWakeFromRestartSentinel,
 } from "./server-restart-sentinel.js";
 import { startGatewayMemoryBackend } from "./server-startup-memory.js";
+
+const SESSION_LOCK_STALE_MS = 30 * 60 * 1000;
 
 export async function startGatewaySidecars(params: {
   cfg: ReturnType<typeof loadConfig>;
@@ -39,6 +47,21 @@ export async function startGatewaySidecars(params: {
   logChannels: { info: (msg: string) => void; error: (msg: string) => void };
   logBrowser: { error: (msg: string) => void };
 }) {
+  try {
+    const stateDir = resolveStateDir(process.env);
+    const sessionDirs = await resolveAgentSessionDirs(stateDir);
+    for (const sessionsDir of sessionDirs) {
+      await cleanStaleLockFiles({
+        sessionsDir,
+        staleMs: SESSION_LOCK_STALE_MS,
+        removeStale: true,
+        log: { warn: (message) => params.log.warn(message) },
+      });
+    }
+  } catch (err) {
+    params.log.warn(`session lock cleanup failed on startup: ${String(err)}`);
+  }
+
   // Start OpenClaw browser control server (unless disabled via config).
   let browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> = null;
   try {
@@ -48,22 +71,10 @@ export async function startGatewaySidecars(params: {
   }
 
   // Start Gmail watcher if configured (hooks.gmail.account).
-  if (!isTruthyEnvValue(process.env.OPENCLAW_SKIP_GMAIL_WATCHER)) {
-    try {
-      const gmailResult = await startGmailWatcher(params.cfg);
-      if (gmailResult.started) {
-        params.logHooks.info("gmail watcher started");
-      } else if (
-        gmailResult.reason &&
-        gmailResult.reason !== "hooks not enabled" &&
-        gmailResult.reason !== "no gmail account configured"
-      ) {
-        params.logHooks.warn(`gmail watcher not started: ${gmailResult.reason}`);
-      }
-    } catch (err) {
-      params.logHooks.error(`gmail watcher failed to start: ${String(err)}`);
-    }
-  }
+  await startGmailWatcherWithLogs({
+    cfg: params.cfg,
+    log: params.logHooks,
+  });
 
   // Validate hooks.gmail.model if configured.
   if (params.cfg.hooks?.gmail?.model) {
@@ -112,6 +123,19 @@ export async function startGatewaySidecars(params: {
     params.logHooks.error(`failed to load hooks: ${String(err)}`);
   }
 
+  // Initialize the workflow engine and register hooks before channels start,
+  // so workflow callback/message handlers are in place for the first message.
+  try {
+    const stateDir = resolveStateDir(process.env);
+    initWorkflowEngine({
+      dataDir: stateDir,
+      toolFactory: () => createOpenClawTools({ config: params.cfg }),
+    });
+    registerWorkflowHooks();
+  } catch (err) {
+    params.log.warn(`workflow engine initialization failed: ${String(err)}`);
+  }
+
   // Launch configured channels so gateway replies via the surface the message came from.
   // Tests can opt out via OPENCLAW_SKIP_CHANNELS (or legacy OPENCLAW_SKIP_PROVIDERS).
   const skipChannels =
@@ -155,22 +179,62 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
 
-  // Start log monitor (self-healing agent dispatch).
+  // Start the log monitor background service (self-healing pipeline).
+  let logMonitorHandle: { stop(): void; updateConfig(cfg: unknown): void } | null = null;
   if (params.cfg.logMonitor?.enabled) {
     try {
       const { startLogMonitor } = await import("../infra/log-monitor.js");
-      const ad = params.cfg.logMonitor.agentDispatch;
-      const handle = startLogMonitor(params.cfg.logMonitor, {
-        logger: params.log as { info: (msg: string) => void; warn: (msg: string) => void },
-        sessionKey: "system:log-monitor",
-        notifyTarget: ad?.notifyTarget,
-        notifyAccountId: ad?.notifyAccountId,
+      // Use the default agent's session key so system events are delivered
+      const defaultAgent = params.cfg.agents?.list?.find((a: { default?: boolean }) => a.default) ?? params.cfg.agents?.list?.[0];
+      const monitorSessionKey = defaultAgent ? `agent:${defaultAgent.id}:main` : undefined;
+      // Resolve Telegram delivery target from bindings
+      const defaultBinding = params.cfg.bindings?.find(
+        (b: { agentId?: string }) => b.agentId === defaultAgent?.id,
+      ) as { agentId?: string; match?: { channel?: string; accountId?: string } } | undefined;
+      const deliveryAccountId = defaultBinding?.match?.accountId;
+      // Read allowed user from Telegram credentials (allowFrom list)
+      let deliveryTo: string | undefined;
+      try {
+        const fs = await import("node:fs");
+        const homeDir = process.env.HOME || "/home/clawdbot";
+        const allowFromPath = `${homeDir}/.openclaw/credentials/telegram-allowFrom.json`;
+        if (fs.existsSync(allowFromPath)) {
+          const data = JSON.parse(fs.readFileSync(allowFromPath, "utf-8")) as { allowFrom?: string[] };
+          if (data.allowFrom?.[0]) {deliveryTo = data.allowFrom[0];}
+        }
+      } catch {
+        // best-effort
+      }
+      // Resolve log file path: env var > supervisor stderr log > resolved logger settings
+      let resolvedLogFile = process.env.OPENCLAW_LOG_FILE;
+      if (!resolvedLogFile) {
+        try {
+          const fs = await import("node:fs");
+          // Check supervisor stderr log (where diagnostic output goes)
+          const supervisorErrLog = "/var/log/opencore.err.log";
+          if (fs.existsSync(supervisorErrLog)) {
+            resolvedLogFile = supervisorErrLog;
+          } else {
+            // Fall back to structured log file
+            const { getResolvedLoggerSettings } = await import("../logging/logger.js");
+            resolvedLogFile = getResolvedLoggerSettings().file;
+          }
+        } catch {
+          resolvedLogFile = "/var/log/opencore.err.log";
+        }
+      }
+      params.log.warn(`[log-monitor] watching: ${resolvedLogFile}`);
+      logMonitorHandle = startLogMonitor(params.cfg.logMonitor, {
+        logFile: resolvedLogFile,
+        sessionKey: monitorSessionKey,
+        deliveryChannel: deliveryTo ? "telegram" : undefined,
+        deliveryTo,
+        deliveryAccountId,
+        logger: {
+          info: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
+          warn: (msg: string) => params.log.warn(`[log-monitor] ${msg}`),
+        },
       });
-      params.log.warn(
-        `log monitor started (agentDispatch=${!!params.cfg.logMonitor.agentDispatch?.enabled})`,
-      );
-      // Store handle for potential cleanup — currently fire-and-forget
-      void handle;
     } catch (err) {
       params.log.warn(`log monitor failed to start: ${String(err)}`);
     }
@@ -198,5 +262,5 @@ export async function startGatewaySidecars(params: {
     }, 750);
   }
 
-  return { browserControl, pluginServices };
+  return { browserControl, pluginServices, logMonitorHandle };
 }

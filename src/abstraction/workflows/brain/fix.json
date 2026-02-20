@@ -1,0 +1,107 @@
+{
+  "id": "brain-fix",
+  "plugin": "brain",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-id",
+  "steps": {
+    "enter-id": {
+      "type": "text-input",
+      "content": "🔧 Brain Fix\n\nEnter the item ID to fix:",
+      "placeholder": "Item ID",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 100,
+        "errorMessage": "Please enter an item ID."
+      },
+      "next": "choose-action"
+    },
+    "choose-action": {
+      "type": "choice",
+      "content": "What do you want to do with item **{{data.enter-id.input}}**?",
+      "options": [
+        { "id": "move", "label": "Move to another bucket" },
+        { "id": "trash", "label": "Move to trash" },
+        { "id": "details", "label": "View details" }
+      ],
+      "transitions": {
+        "move": "enter-bucket",
+        "trash": "confirm-trash",
+        "details": "execute-details"
+      }
+    },
+    "enter-bucket": {
+      "type": "text-input",
+      "content": "Enter the target bucket (people, projects, ideas, admin, documents, goals, health, finance):",
+      "placeholder": "Bucket name",
+      "validation": {
+        "pattern": "^(people|projects|ideas|admin|documents|goals|health|finance)$",
+        "errorMessage": "Please enter a valid bucket name."
+      },
+      "next": "execute-move"
+    },
+    "execute-move": {
+      "type": "info",
+      "content": "Moving item to {{data.enter-bucket.input}}...",
+      "toolCall": {
+        "name": "brain_fix",
+        "paramMap": {
+          "id": "$data.enter-id.input",
+          "correction": "→ $data.enter-bucket.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "confirm-trash": {
+      "type": "confirm",
+      "content": "⚠️ Move item **{{data.enter-id.input}}** to trash?",
+      "confirmLabel": "Trash",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-trash",
+        "no": "cancelled"
+      }
+    },
+    "execute-trash": {
+      "type": "info",
+      "content": "Moving to trash...",
+      "toolCall": {
+        "name": "brain_fix",
+        "paramMap": {
+          "id": "$data.enter-id.input",
+          "correction": "→ trash"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-details": {
+      "type": "info",
+      "content": "Fetching item details...",
+      "toolCall": {
+        "name": "brain_fix",
+        "paramMap": {
+          "id": "$data.enter-id.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Done. See results above.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Operation cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Operation failed. Please check the item ID.",
+      "terminal": true
+    }
+  }
+}

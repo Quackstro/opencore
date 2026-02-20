@@ -54,4 +54,13 @@ export type LogMonitorConfig = {
   crashRecovery?: boolean;
   /** Agent dispatch configuration for self-healing. */
   agentDispatch?: AgentDispatchConfig;
+  /** Security audit integration. */
+  securityAudit?: {
+    /** Enable periodic security audit scanning. Default: false. */
+    enabled?: boolean;
+    /** Scan interval in milliseconds. Default: 21600000 (6 hours). */
+    intervalMs?: number;
+    /** Check IDs to suppress (known false positives). */
+    acknowledgedChecks?: string[];
+  };
 };

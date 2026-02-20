@@ -14,6 +14,7 @@ import { runCrashRecoveryCheck } from "./crash-recovery.js";
 import { emitDiagnosticEvent } from "./diagnostic-events.js";
 import { dispatchHealingAgent } from "./log-monitor-agent-dispatch.js";
 import { startDiagnosticCollector } from "./log-monitor-diagnostics.js";
+import { startSecurityAuditCollector } from "./log-monitor-security-audit.js";
 import { normalizeResolution, runHandlers, type HandlerContext } from "./log-monitor-handlers.js";
 import {
   createIssueRegistry,
@@ -45,6 +46,7 @@ const DEFAULTS: Required<LogMonitorConfig> = {
   autoResolve: true,
   crashRecovery: true,
   agentDispatch: DEFAULT_AGENT_DISPATCH,
+  securityAudit: { enabled: false },
 };
 
 // ============================================================================
@@ -134,6 +136,33 @@ export function classifyLogLine(line: string): ClassifiedIssue | null {
     };
   }
 
+  // Match lane task errors (command queue failures — rate limits, auth errors, etc.)
+  const laneMatch = line.match(
+    /\[diagnostic\] lane task error: lane=(\S+).*?error="(.+)"/,
+  );
+  if (laneMatch) {
+    const lane = laneMatch[1];
+    const errMsg = laneMatch[2].slice(0, 200);
+    const isNetwork = errMsg.includes("rate limit") || errMsg.includes("ECONNRESET") ||
+      errMsg.includes("ETIMEDOUT") || errMsg.includes("fetch failed");
+    return {
+      signature: `lane:${lane.split(":").slice(0, 2).join(":")}:${errMsg.slice(0, 50)}`,
+      category: isNetwork ? "network" : "error",
+      message: `Lane ${lane}: ${errMsg}`,
+    };
+  }
+
+  // Match embedded agent failures (all models failed)
+  const agentFailMatch = line.match(/Embedded agent failed.*?:\s*(.+)/);
+  if (agentFailMatch) {
+    const errMsg = agentFailMatch[1].slice(0, 200);
+    return {
+      signature: `agent:embedded-fail:${errMsg.slice(0, 50)}`,
+      category: "error",
+      message: errMsg,
+    };
+  }
+
   // Match uncaught exception logs
   if (line.includes("[openclaw] FATAL uncaught exception")) {
     const msg = line.replace(/.*\[openclaw\]\s*/, "").slice(0, 200);
@@ -215,11 +244,13 @@ export interface LogMonitorDeps {
   logFile?: string;
   /** Session key for system events. If not provided, skips event delivery. */
   sessionKey?: string;
+  /** Delivery channel for direct messaging (e.g. "telegram"). */
+  deliveryChannel?: string;
+  /** Delivery target (e.g. Telegram chat ID). */
+  deliveryTo?: string;
+  /** Account ID for multi-account channels. */
+  deliveryAccountId?: string;
   logger?: { info: (msg: string) => void; warn: (msg: string) => void };
-  /** Telegram chat ID to send approval notifications to. */
-  notifyTarget?: string;
-  /** Telegram account ID for sending notifications. */
-  notifyAccountId?: string;
 }
 
 export interface LogMonitorHandle {
@@ -262,22 +293,28 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   // Main config (mutable for updateConfig)
   let currentConfig = merged;
 
-  // Start diagnostic event collector to capture real-time events
-  const stopDiagnostics = startDiagnosticCollector((issue) => {
-    deps.logger?.warn?.(
-      `log-monitor: collector received issue: ${issue.signature} (category=${issue.category})`,
-    );
+  // Shared issue callback for all collectors
+  const handleCollectedIssue = (issue: { signature: string; category: IssueCategory; message: string }) => {
     const decision = registry.record(issue);
-    deps.logger?.warn?.(
-      `log-monitor: registry decision for ${issue.signature}: surface=${decision.shouldSurface} autoResolve=${decision.shouldAutoResolve}`,
-    );
     if (decision.shouldSurface) {
       surfaceIssue(issue.signature, issue.message, deps);
     }
     if (decision.shouldAutoResolve) {
       void resolveIssue(issue, registry, handlerCtx, deps, currentConfig.agentDispatch);
     }
-  });
+  };
+
+  // Start diagnostic event collector to capture real-time events
+  const stopDiagnostics = startDiagnosticCollector(handleCollectedIssue);
+
+  // Start security audit collector if enabled
+  const secAuditCfg = cfg.securityAudit;
+  const stopSecurityAudit = secAuditCfg?.enabled
+    ? startSecurityAuditCollector(handleCollectedIssue, {
+        intervalMs: secAuditCfg.intervalMs,
+        acknowledgedChecks: secAuditCfg.acknowledgedChecks,
+      })
+    : undefined;
 
   function tick() {
     if (!deps.logFile) {
@@ -325,14 +362,13 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   const interval = setInterval(tick, currentConfig.intervalMs);
   interval.unref();
 
-  // Debug: log globalThis listener count to verify singleton works across chunks
-  const diagGlobal = (globalThis as any).__openclaw_diagnostic_events__;
-  deps.logger?.warn?.(`log-monitor: started (listeners=${diagGlobal?.listeners?.size ?? "N/A"})`);
+  deps.logger?.info?.("log-monitor: started");
 
   return {
     stop() {
       clearInterval(interval);
       stopDiagnostics();
+      stopSecurityAudit?.();
       registry.flush();
       deps.logger?.info?.("log-monitor: stopped");
     },
@@ -387,23 +423,29 @@ async function resolveIssue(
   deps: LogMonitorDeps,
   agentDispatchConfig?: AgentDispatchConfig,
 ): Promise<void> {
-  registry.markAutoResolveAttempt(issue.signature);
+  const issueRecord = registry.getIssue(issue.signature);
+  const occurrences = issueRecord?.occurrences ?? 0;
 
-  const entry = registry.getIssue(issue.signature);
-  const result = await runHandlers({ ...issue, occurrences: entry?.occurrences ?? 0 }, ctx);
+  const result = await runHandlers({ ...issue, occurrences }, ctx);
 
   if (result) {
     const resolution = normalizeResolution(result.resolution);
-    deps.logger?.warn?.(
-      `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result}`,
+    deps.logger?.info?.(
+      `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result} (occurrences=${occurrences})`,
     );
+
+    // Only mark auto-resolve cooldown if the handler actually resolved it
+    // (not for "failed" or "needs-*" results that need re-evaluation)
+    if (result.result === "fixed") {
+      registry.markAutoResolveAttempt(issue.signature);
+    }
 
     if (resolution.result === "needs-agent") {
       const config = { ...DEFAULT_AGENT_DISPATCH, ...agentDispatchConfig };
       if (config.enabled) {
         const recentLines = getRecentLogLines(deps, 50);
         const dispatchResult = await dispatchHealingAgent({
-          issue: { ...issue, occurrences: entry?.occurrences ?? 0 },
+          issue: { ...issue, occurrences },
           recentLogLines: recentLines,
           agentContext: resolution.agentContext,
           config,
@@ -414,7 +456,7 @@ async function resolveIssue(
           return;
         }
         // If dispatch was blocked, fall through to user escalation
-        deps.logger?.warn?.(
+        deps.logger?.info?.(
           `log-monitor: agent dispatch blocked (${dispatchResult.reason}), escalating to user`,
         );
       }

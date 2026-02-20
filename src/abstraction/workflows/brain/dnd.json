@@ -1,0 +1,73 @@
+{
+  "id": "brain-dnd",
+  "plugin": "brain",
+  "version": "1.0.0",
+  "ttl": 120000,
+  "entryPoint": "choose-action",
+  "steps": {
+    "choose-action": {
+      "type": "choice",
+      "content": "🔕 Do Not Disturb\n\nManage DND mode:",
+      "options": [
+        { "id": "on", "label": "Enable DND" },
+        { "id": "off", "label": "Disable DND" },
+        { "id": "status", "label": "Check Status" }
+      ],
+      "transitions": {
+        "on": "execute-on",
+        "off": "execute-off",
+        "status": "execute-status"
+      }
+    },
+    "execute-on": {
+      "type": "info",
+      "content": "Enabling DND...",
+      "toolCall": {
+        "name": "brain_dnd",
+        "paramMap": { "action": "on" },
+        "onError": "error"
+      },
+      "next": "done-on"
+    },
+    "done-on": {
+      "type": "info",
+      "content": "🔕 DND enabled. Brain notifications are silenced.",
+      "terminal": true
+    },
+    "execute-off": {
+      "type": "info",
+      "content": "Disabling DND...",
+      "toolCall": {
+        "name": "brain_dnd",
+        "paramMap": { "action": "off" },
+        "onError": "error"
+      },
+      "next": "done-off"
+    },
+    "done-off": {
+      "type": "info",
+      "content": "🔔 DND disabled. Brain notifications are active.",
+      "terminal": true
+    },
+    "execute-status": {
+      "type": "info",
+      "content": "Checking DND status...",
+      "toolCall": {
+        "name": "brain_dnd",
+        "paramMap": { "action": "status" },
+        "onError": "error"
+      },
+      "next": "done-status"
+    },
+    "done-status": {
+      "type": "info",
+      "content": "📊 DND status shown above.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ DND operation failed.",
+      "terminal": true
+    }
+  }
+}

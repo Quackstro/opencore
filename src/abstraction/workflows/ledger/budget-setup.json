@@ -1,0 +1,149 @@
+{
+  "id": "ledger-budget-setup",
+  "plugin": "ledger",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "choose-action",
+  "steps": {
+    "choose-action": {
+      "type": "choice",
+      "content": "💰 Budget Management\n\nWhat would you like to do?",
+      "options": [
+        { "id": "set-category", "label": "Set Category Budget" },
+        { "id": "set-monthly", "label": "Set Monthly Total" },
+        { "id": "view-status", "label": "View Budget Status" }
+      ],
+      "transitions": {
+        "set-category": "enter-category",
+        "set-monthly": "enter-monthly-amount",
+        "view-status": "enter-status-period"
+      }
+    },
+    "enter-category": {
+      "type": "text-input",
+      "content": "Enter the budget category name:",
+      "placeholder": "e.g., groceries, dining, transport",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 50,
+        "errorMessage": "Please enter a category name."
+      },
+      "next": "enter-category-amount"
+    },
+    "enter-category-amount": {
+      "type": "text-input",
+      "content": "Enter the budget amount for {{data.enter-category.input}}:",
+      "placeholder": "Amount in USD",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+        "errorMessage": "Please enter a valid amount (e.g., 500 or 250.50)."
+      },
+      "next": "confirm-category-budget"
+    },
+    "confirm-category-budget": {
+      "type": "confirm",
+      "content": "Set budget for **{{data.enter-category.input}}** to ${{data.enter-category-amount.input}}?",
+      "confirmLabel": "Set Budget",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-set-category",
+        "no": "cancelled"
+      }
+    },
+    "execute-set-category": {
+      "type": "info",
+      "content": "Setting budget...",
+      "toolCall": {
+        "name": "ledger_budget",
+        "paramMap": {
+          "action": "set",
+          "category": "$data.enter-category.input",
+          "amount": "$data.enter-category-amount.input"
+        },
+        "onError": "error"
+      },
+      "next": "category-done"
+    },
+    "category-done": {
+      "type": "info",
+      "content": "✅ Budget set: **{{data.enter-category.input}}** → ${{data.enter-category-amount.input}}",
+      "terminal": true
+    },
+    "enter-monthly-amount": {
+      "type": "text-input",
+      "content": "Enter total monthly budget amount:",
+      "placeholder": "Amount in USD",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+        "errorMessage": "Please enter a valid amount."
+      },
+      "next": "confirm-monthly"
+    },
+    "confirm-monthly": {
+      "type": "confirm",
+      "content": "Set total monthly budget to ${{data.enter-monthly-amount.input}}?",
+      "confirmLabel": "Set Monthly",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-set-monthly",
+        "no": "cancelled"
+      }
+    },
+    "execute-set-monthly": {
+      "type": "info",
+      "content": "Setting monthly budget...",
+      "toolCall": {
+        "name": "ledger_budget",
+        "paramMap": {
+          "action": "setMonthly",
+          "amount": "$data.enter-monthly-amount.input"
+        },
+        "onError": "error"
+      },
+      "next": "monthly-done"
+    },
+    "monthly-done": {
+      "type": "info",
+      "content": "✅ Monthly budget set to ${{data.enter-monthly-amount.input}}",
+      "terminal": true
+    },
+    "enter-status-period": {
+      "type": "text-input",
+      "content": "Enter the period to check (YYYY-MM):",
+      "placeholder": "2024-01",
+      "validation": {
+        "pattern": "^[0-9]{4}-[0-9]{2}$",
+        "errorMessage": "Please enter a valid period (e.g., 2024-01)."
+      },
+      "next": "execute-status"
+    },
+    "execute-status": {
+      "type": "info",
+      "content": "Fetching budget status for {{data.enter-status-period.input}}...",
+      "toolCall": {
+        "name": "ledger_budget",
+        "paramMap": {
+          "action": "status",
+          "period": "$data.enter-status-period.input"
+        },
+        "onError": "error"
+      },
+      "next": "status-done"
+    },
+    "status-done": {
+      "type": "info",
+      "content": "📊 Budget status retrieved. See above for details.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Budget operation cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Budget operation failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

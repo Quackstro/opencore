@@ -212,6 +212,35 @@ const StuckSessionHandler: LogMonitorHandler = {
 };
 
 /**
+ * Handles security audit findings (signature: security:*).
+ * Critical findings dispatch a healing agent; warn-level needs human review.
+ */
+const SecurityAuditHandler: LogMonitorHandler = {
+  name: "SecurityAudit",
+
+  matches(issue) {
+    return issue.category === "security";
+  },
+
+  async resolve(issue, _ctx): Promise<HandlerResolution> {
+    // Critical findings (mapped to [high] in message) → dispatch healing agent
+    if (issue.message.startsWith("[high]")) {
+      return {
+        result: "needs-agent",
+        agentContext: {
+          task: `Security audit finding: ${issue.message}. Investigate and remediate the security issue.`,
+          tools: ["read_source", "exec_build", "check_config"],
+          severity: "high",
+          timeoutSeconds: 300,
+        },
+      };
+    }
+    // Warn-level findings → needs human review
+    return { result: "needs-human" };
+  },
+};
+
+/**
  * Catch-all handler for unhandled errors. Dispatches a healing agent
  * when occurrences are high enough to warrant investigation.
  * Must be last in the handler list.
@@ -224,17 +253,18 @@ const GenericErrorHandler: LogMonitorHandler = {
   },
 
   async resolve(issue, _ctx): Promise<HandlerResolution> {
-    if (issue.occurrences >= 2) {
+    if (issue.occurrences >= 5) {
       return {
         result: "needs-agent",
         agentContext: {
           task: `Diagnose and fix recurring error: ${issue.message}`,
-          severity: issue.occurrences >= 5 ? "high" : "medium",
+          severity: "medium",
         },
       };
     }
-    // Single occurrence — suppress
-    return { result: "fixed" };
+    // Not enough occurrences yet — return failed so the auto-resolve
+    // cooldown isn't set and the handler can re-evaluate on next surface
+    return { result: "failed" };
   },
 };
 
@@ -248,6 +278,7 @@ export const BUILTIN_HANDLERS: LogMonitorHandler[] = [
   OAuthTokenHandler,
   CrashRecoveryHandler,
   StuckSessionHandler,
+  SecurityAuditHandler,
   GenericErrorHandler,
 ];
 

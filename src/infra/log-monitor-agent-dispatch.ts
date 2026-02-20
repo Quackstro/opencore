@@ -61,6 +61,10 @@ export interface PendingApproval {
   createdAt: number;
   expiresAt: number;
   opts: AgentDispatchOptions;
+  /** Telegram message ID of the approval request (for editing on expiry) */
+  telegramMessageId?: string;
+  /** Telegram chat ID where the approval was sent */
+  telegramChatId?: string;
 }
 
 const pendingApprovals = new Map<string, PendingApproval>();
@@ -173,7 +177,7 @@ ${(context?.tools ?? DEFAULT_REMEDIATION_TOOLS.map((t) => t)).map((t) => `- ${t}
 4. Report what you did and whether it worked
 
 ## Safety
-- Do NOT restart the gateway unless explicitly needed
+- Do NOT restart the gateway yourself — if a restart is needed after a fix, the user will be offered a Deploy & Restart button
 - Do NOT modify config files without understanding the impact
 - If unsure, report findings and escalate to user
 `;
@@ -229,6 +233,29 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
       opts.deps.logger?.info?.(
         `log-monitor: approval request ${id} expired for ${opts.issue.signature}`,
       );
+      // Edit the original approval message to show expired state (remove buttons)
+      if (expired.telegramMessageId && expired.telegramChatId) {
+        const expiredText = `⏰ **Healing Approval Expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `**Issue:** ${expired.issueMessage}\n` +
+          `**Severity:** ${expired.severity}\n\n` +
+          `_The approval window closed. If the error persists, a new request will be sent._`;
+        import("../telegram/send.js")
+          .then(({ editMessageTelegram }) => {
+            void editMessageTelegram(expired.telegramChatId!, expired.telegramMessageId!, expiredText, {
+              accountId: opts.deps.deliveryAccountId,
+            });
+          })
+          .catch(() => {});
+      } else if (opts.deps.sessionKey) {
+        const expiryText = `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `**Issue:** ${expired.issueMessage}\n` +
+          `The approval window closed. If the error persists, a new request will be sent.`;
+        import("./system-events.js")
+          .then(({ enqueueSystemEvent }) => {
+            enqueueSystemEvent(expiryText, { sessionKey: opts.deps.sessionKey! });
+          })
+          .catch(() => {});
+      }
     }
   }, timeoutSeconds * 1000);
   timer.unref();
@@ -245,11 +272,16 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
 }
 
 function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps): void {
+  if (!deps.sessionKey && !deps.deliveryTo) {
+    return;
+  }
   const severityEmoji =
     pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const shortId = pending.id.slice(0, 8);
   const text = [
     `${severityEmoji} **Healing Agent Approval Required**`,
     "",
+    `🆔 \`${shortId}\``,
     `**Issue:** ${pending.issueMessage}`,
     `**Severity:** ${pending.severity}`,
     `**Proposed action:** ${pending.task}`,
@@ -259,38 +291,69 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
 
   const buttons = [
     [
-      { text: "✅ Approve", callback_data: `/heal approve ${pending.id}` },
-      { text: "❌ Reject", callback_data: `/heal reject ${pending.id}` },
+      { text: `✅ Approve`, callback_data: `/heal approve ${shortId}` },
+      { text: `🚫 Reject`, callback_data: `/heal reject ${shortId}` },
     ],
   ];
 
-  // Try Telegram direct send (supports inline buttons), then system event fallback.
-  void (async () => {
-    try {
-      const target = deps.notifyTarget;
-      if (target) {
-        const { sendMessageTelegram } = await import("../telegram/send.js");
-        await sendMessageTelegram(target, text, {
-          accountId: deps.notifyAccountId,
+  // Try direct Telegram delivery with inline buttons first
+  if (deps.deliveryChannel === "telegram" && deps.deliveryTo) {
+    import("../telegram/send.js")
+      .then(({ sendMessageTelegram }) => {
+        return sendMessageTelegram(deps.deliveryTo!, text, {
+          accountId: deps.deliveryAccountId,
           buttons,
         });
-        return;
-      }
-    } catch {
-      // fall through to system event
-    }
+      })
+      .then((result) => {
+        // Store message ID for editing on expiry/approval
+        if (result?.messageId) {
+          pending.telegramMessageId = String(result.messageId);
+          pending.telegramChatId = deps.deliveryTo;
+        }
+      })
+      .catch(() => {
+        // Fall back to system event
+        fallbackToSystemEvent(text, pending, deps);
+      });
+    return;
+  }
 
-    // Fallback: system event (no button support)
-    if (deps.sessionKey) {
-      try {
-        const { enqueueSystemEvent } = await import("./system-events.js");
-        const fallbackText = `${text}\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
-        enqueueSystemEvent(fallbackText, { sessionKey: deps.sessionKey });
-      } catch {
-        // best-effort
-      }
-    }
-  })();
+  // Fallback: system event (no button support)
+  fallbackToSystemEvent(text, pending, deps);
+}
+
+function editApprovalMessage(pending: PendingApproval, statusLine: string): void {
+  if (!pending.telegramMessageId || !pending.telegramChatId) return;
+  const severityEmoji =
+    pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+  const shortId = pending.id.slice(0, 8);
+  const updatedText = [
+    statusLine,
+    "",
+    `🆔 \`${shortId}\``,
+    `${severityEmoji} **Issue:** ${pending.issueMessage}`,
+    `**Severity:** ${pending.severity}`,
+  ].join("\n");
+  import("../telegram/send.js")
+    .then(({ editMessageTelegram }) => {
+      void editMessageTelegram(pending.telegramChatId!, pending.telegramMessageId!, updatedText, {
+        accountId: pending.opts.deps.deliveryAccountId,
+      });
+    })
+    .catch(() => {});
+}
+
+function fallbackToSystemEvent(text: string, pending: PendingApproval, deps: LogMonitorDeps): void {
+  if (!deps.sessionKey) return;
+  const fallbackText = text + `\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
+  import("./system-events.js")
+    .then(({ enqueueSystemEvent }) => {
+      enqueueSystemEvent(fallbackText, { sessionKey: deps.sessionKey! });
+    })
+    .catch(() => {
+      // Ignore import failure
+    });
 }
 
 /**
@@ -315,6 +378,9 @@ export async function approveHealingDispatch(approvalId: string): Promise<{
     approvalTimers.delete(approvalId);
   }
 
+  // Edit approval message to show approved state
+  editApprovalMessage(pending, "✅ **Approved** — healing agent dispatched");
+
   // Dispatch with gate bypassed
   const result = await dispatchHealingAgentInternal(pending.opts);
   return { approved: true, dispatched: result.dispatched, reason: result.reason };
@@ -335,6 +401,9 @@ export function rejectHealingDispatch(approvalId: string): { rejected: boolean; 
     clearTimeout(timer);
     approvalTimers.delete(approvalId);
   }
+
+  // Edit approval message to show rejected state
+  editApprovalMessage(pending, "🚫 **Rejected** — healing agent not dispatched");
 
   pending.opts.deps.logger?.info?.(
     `log-monitor: healing dispatch rejected by user for ${pending.issueSignature}`,
@@ -465,9 +534,6 @@ async function dispatchHealingAgentInternal(
       label: `healing:${issue.signature.slice(0, 40)}`,
       model: config.model,
       runTimeoutSeconds: timeoutSeconds,
-      requesterOrigin: deps.notifyTarget
-        ? { channel: "telegram", to: deps.notifyTarget, accountId: deps.notifyAccountId }
-        : undefined,
     });
 
     // Track in active agents
@@ -512,14 +578,15 @@ function buildHealingSystemPrompt(context?: AgentContext): string {
 Your job is to diagnose and fix the detected issue.
 
 Severity: ${severity}
-${severity === "high" ? "You may restart services if necessary." : "Avoid restarting services unless absolutely required."}
 
 Safety constraints:
+- Do NOT restart the gateway or services yourself — if a restart is needed, say "restart required" or "restart recommended" in your report and the user will be offered a restart button
 - Do NOT send messages to users
 - Do NOT modify wallet or brain data
 - Do NOT install new packages
 - Report your findings clearly in your final message
 - If you cannot fix the issue, explain what you found and recommend next steps
+- If the issue is benign, transient, or self-resolved, say so clearly (e.g. "no action needed", "self-resolved")
 `;
 }
 
@@ -615,20 +682,53 @@ export async function handleHealingAgentLifecycleEnd(
     const reply = await readLatestAssistantReply({ sessionKey: childSessionKey });
     summary = reply?.trim() || "(no output)";
 
-    // Heuristic: check if the agent reported failure
+    // Heuristic: check if the agent reported failure vs successful diagnosis
     if (success && summary) {
       const lower = summary.toLowerCase();
-      const failureSignals = [
-        "could not",
-        "unable to",
-        "failed to",
-        "cannot fix",
-        "escalat",
-        "needs manual",
-        "needs human",
+
+      // Success signals: agent completed diagnosis, even if no fix was needed
+      const successSignals = [
+        "self-resolved",
+        "self resolved",
+        "no action needed",
+        "no action required",
+        "no fix needed",
+        "no fix required",
+        "no remediation",
+        "nothing urgent",
+        "benign",
+        "transient",
+        "already resolved",
+        "resolved itself",
+        "not a real",
+        "false positive",
+        "diagnosis complete",
+        "no real error",
+        "no real issue",
+        "running fine",
+        "running correctly",
+        "operating normally",
+        "healthy",
       ];
-      if (failureSignals.some((sig) => lower.includes(sig))) {
-        success = false;
+      const isSuccessfulDiagnosis = successSignals.some((sig) => lower.includes(sig));
+
+      if (!isSuccessfulDiagnosis) {
+        const failureSignals = [
+          "could not fix",
+          "unable to fix",
+          "unable to resolve",
+          "failed to fix",
+          "failed to resolve",
+          "cannot fix",
+          "cannot resolve",
+          "escalat",
+          "needs manual",
+          "needs human",
+          "requires manual",
+        ];
+        if (failureSignals.some((sig) => lower.includes(sig))) {
+          success = false;
+        }
       }
     }
   } catch {

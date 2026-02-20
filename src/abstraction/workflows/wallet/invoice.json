@@ -1,0 +1,62 @@
+{
+  "id": "wallet-invoice",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-amount",
+  "steps": {
+    "enter-amount": {
+      "type": "text-input",
+      "content": "📥 Create Invoice\n\nHow much DOGE should the invoice be for?",
+      "placeholder": "Amount in DOGE",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+        "errorMessage": "Please enter a valid amount (e.g., 10 or 5.5)."
+      },
+      "next": "enter-description"
+    },
+    "enter-description": {
+      "type": "text-input",
+      "content": "What is this invoice for?",
+      "placeholder": "Invoice description",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 200,
+        "errorMessage": "Please provide a description."
+      },
+      "next": "confirm-invoice"
+    },
+    "confirm-invoice": {
+      "type": "confirm",
+      "content": "📥 Create Invoice\n\nAmount: {{data.enter-amount.input}} DOGE\nDescription: {{data.enter-description.input}}\n\nCreate this invoice?",
+      "confirmLabel": "Create Invoice",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "create",
+        "no": "cancelled"
+      }
+    },
+    "create": {
+      "type": "info",
+      "content": "Creating invoice...",
+      "toolCall": {
+        "name": "wallet_invoice",
+        "paramMap": {
+          "amount": "$data.enter-amount.input",
+          "description": "$data.enter-description.input"
+        }
+      },
+      "next": "complete"
+    },
+    "complete": {
+      "type": "info",
+      "content": "✅ Invoice created for {{data.enter-amount.input}} DOGE.\n\nShare the invoice details with the payer.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Invoice creation cancelled.",
+      "terminal": true
+    }
+  }
+}

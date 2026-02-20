@@ -14,10 +14,12 @@ import { handleApproveCommand } from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleDeployCommand } from "./commands-deploy.js";
 import { handleHealCommand } from "./commands-heal.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
+  handleExportSessionCommand,
   handleHelpCommand,
   handleStatusCommand,
   handleWhoamiCommand,
@@ -34,6 +36,7 @@ import {
 } from "./commands-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
 import { handleTtsCommands } from "./commands-tts.js";
+import { handleWorkflowCommand } from "./commands-workflow.js";
 import { routeReply } from "./route-reply.js";
 
 let HANDLERS: CommandHandler[] | null = null;
@@ -55,9 +58,12 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleAllowlistCommand,
       handleApproveCommand,
       handleContextCommand,
+      handleExportSessionCommand,
       handleWhoamiCommand,
       handleSubagentsCommand,
+      handleDeployCommand,
       handleHealCommand,
+      handleWorkflowCommand,
       handleConfigCommand,
       handleDebugCommand,
       handleModelsCommand,

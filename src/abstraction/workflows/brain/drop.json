@@ -1,0 +1,43 @@
+{
+  "id": "brain-drop",
+  "plugin": "brain",
+  "version": "1.0.0",
+  "ttl": 300000,
+  "entryPoint": "enter-thought",
+  "steps": {
+    "enter-thought": {
+      "type": "text-input",
+      "content": "🧠 Brain Drop\n\nCapture a thought — it will be automatically classified:",
+      "placeholder": "What's on your mind?",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 2000,
+        "errorMessage": "Please enter something to capture."
+      },
+      "next": "execute-drop"
+    },
+    "execute-drop": {
+      "type": "info",
+      "content": "Saving thought...",
+      "toolCall": {
+        "name": "brain_drop",
+        "paramMap": {
+          "text": "$data.enter-thought.input",
+          "source": "drop"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Thought captured!",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Failed to save thought. Please try again.",
+      "terminal": true
+    }
+  }
+}

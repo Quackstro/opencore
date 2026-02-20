@@ -1,0 +1,44 @@
+{
+  "id": "heal-repair",
+  "plugin": "heal",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "confirm-repair",
+  "steps": {
+    "confirm-repair": {
+      "type": "confirm",
+      "content": "🔧 Auto-Repair\n\nThis will attempt to automatically fix detected issues. Proceed?",
+      "confirmLabel": "Run Repair",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-repair",
+        "no": "cancelled"
+      }
+    },
+    "execute-repair": {
+      "type": "info",
+      "content": "Running auto-repair...",
+      "toolCall": {
+        "name": "heal_repair",
+        "paramMap": { "auto": "true" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Repair complete. Check results above.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Repair cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Repair failed. Manual intervention may be needed.",
+      "terminal": true
+    }
+  }
+}

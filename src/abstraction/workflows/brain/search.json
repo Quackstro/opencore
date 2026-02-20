@@ -1,0 +1,43 @@
+{
+  "id": "brain-search",
+  "plugin": "brain",
+  "version": "1.0.0",
+  "ttl": 300000,
+  "showProgress": false,
+  "entryPoint": "enter-query",
+  "steps": {
+    "enter-query": {
+      "type": "text-input",
+      "content": "🔍 Brain Search\n\nWhat are you looking for?",
+      "placeholder": "Search query",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 200,
+        "errorMessage": "Please enter a search query."
+      },
+      "next": "execute-search"
+    },
+    "execute-search": {
+      "type": "info",
+      "content": "Searching brain for \"{{data.enter-query.input}}\"...",
+      "toolCall": {
+        "name": "brain_search",
+        "paramMap": {
+          "query": "$data.enter-query.input"
+        },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "🔍 Search results shown above.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Search failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "wallet-history",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 60000,
+  "showProgress": false,
+  "entryPoint": "fetch",
+  "steps": {
+    "fetch": {
+      "type": "info",
+      "content": "Fetching transaction history...",
+      "toolCall": {
+        "name": "wallet_history",
+        "paramMap": {
+          "limit": "10"
+        }
+      },
+      "next": "display"
+    },
+    "display": {
+      "type": "info",
+      "content": "📜 Transaction history retrieved. Check above for details.",
+      "terminal": true
+    }
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "id": "ledger-bill-management",
+  "plugin": "ledger",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "choose-action",
+  "steps": {
+    "choose-action": {
+      "type": "choice",
+      "content": "📋 Bill Management\n\nWhat would you like to do?",
+      "options": [
+        { "id": "upcoming", "label": "View Upcoming Bills" },
+        { "id": "detect", "label": "Detect Recurring Charges" },
+        { "id": "add", "label": "Add a Bill" }
+      ],
+      "transitions": {
+        "upcoming": "execute-upcoming",
+        "detect": "execute-detect",
+        "add": "enter-bill-name"
+      }
+    },
+    "execute-upcoming": {
+      "type": "info",
+      "content": "Checking upcoming bills...",
+      "toolCall": {
+        "name": "ledger_bills",
+        "paramMap": { "action": "upcoming" },
+        "onError": "error"
+      },
+      "next": "upcoming-done"
+    },
+    "upcoming-done": {
+      "type": "info",
+      "content": "📋 Upcoming bills shown above.",
+      "terminal": true
+    },
+    "execute-detect": {
+      "type": "info",
+      "content": "Scanning transaction history for recurring charges...",
+      "toolCall": {
+        "name": "ledger_bills",
+        "paramMap": { "action": "detect" },
+        "onError": "error"
+      },
+      "next": "detect-done"
+    },
+    "detect-done": {
+      "type": "info",
+      "content": "🔍 Recurring charge detection complete. See results above.",
+      "terminal": true
+    },
+    "enter-bill-name": {
+      "type": "text-input",
+      "content": "Enter the bill name:",
+      "placeholder": "e.g., Netflix",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 100,
+        "errorMessage": "Please enter a bill name."
+      },
+      "next": "enter-bill-amount"
+    },
+    "enter-bill-amount": {
+      "type": "text-input",
+      "content": "Enter the expected amount for {{data.enter-bill-name.input}}:",
+      "placeholder": "Amount in USD",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,2})?$",
+        "errorMessage": "Please enter a valid amount."
+      },
+      "next": "enter-bill-day"
+    },
+    "enter-bill-day": {
+      "type": "text-input",
+      "content": "What day of the month is {{data.enter-bill-name.input}} due?",
+      "placeholder": "1-31",
+      "validation": {
+        "pattern": "^([1-9]|[12][0-9]|3[01])$",
+        "errorMessage": "Please enter a day (1-31)."
+      },
+      "next": "confirm-add-bill"
+    },
+    "confirm-add-bill": {
+      "type": "confirm",
+      "content": "Add bill:\n• **{{data.enter-bill-name.input}}**\n• Amount: ${{data.enter-bill-amount.input}}\n• Due: Day {{data.enter-bill-day.input}} monthly\n\nConfirm?",
+      "confirmLabel": "Add Bill",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-add-bill",
+        "no": "cancelled"
+      }
+    },
+    "execute-add-bill": {
+      "type": "info",
+      "content": "Adding bill...",
+      "toolCall": {
+        "name": "ledger_bills",
+        "paramMap": {
+          "action": "add",
+          "name": "$data.enter-bill-name.input",
+          "expectedAmount": "$data.enter-bill-amount.input",
+          "dayOfMonth": "$data.enter-bill-day.input",
+          "frequency": "monthly"
+        },
+        "onError": "error"
+      },
+      "next": "add-done"
+    },
+    "add-done": {
+      "type": "info",
+      "content": "✅ Bill added: {{data.enter-bill-name.input}} — ${{data.enter-bill-amount.input}} on day {{data.enter-bill-day.input}}",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Bill operation cancelled.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Operation failed. Please try again.",
+      "terminal": true
+    }
+  }
+}

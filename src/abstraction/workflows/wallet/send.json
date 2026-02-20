@@ -1,0 +1,81 @@
+{
+  "id": "wallet-send",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-address",
+  "steps": {
+    "enter-address": {
+      "type": "text-input",
+      "content": "📤 Send DOGE\n\nEnter the recipient's DOGE address:",
+      "placeholder": "D...",
+      "validation": {
+        "minLength": 26,
+        "maxLength": 35,
+        "pattern": "^D[1-9A-HJ-NP-Za-km-z]{25,34}$",
+        "errorMessage": "Please enter a valid DOGE address (starts with D, 26-35 characters)."
+      },
+      "next": "enter-amount"
+    },
+    "enter-amount": {
+      "type": "text-input",
+      "content": "How much DOGE do you want to send to {{data.enter-address.input}}?",
+      "placeholder": "Amount in DOGE",
+      "validation": {
+        "pattern": "^[0-9]+(\\.[0-9]{1,8})?$",
+        "errorMessage": "Please enter a valid amount (e.g., 10 or 5.5)."
+      },
+      "next": "enter-reason"
+    },
+    "enter-reason": {
+      "type": "text-input",
+      "content": "What is this payment for? (for audit log)",
+      "placeholder": "Payment reason",
+      "validation": {
+        "minLength": 1,
+        "maxLength": 200,
+        "errorMessage": "Please provide a reason for this payment."
+      },
+      "next": "confirm-send"
+    },
+    "confirm-send": {
+      "type": "confirm",
+      "content": "📤 Confirm Transaction\n\nSend {{data.enter-amount.input}} DOGE\nTo: {{data.enter-address.input}}\nReason: {{data.enter-reason.input}}\n\nProceed?",
+      "confirmLabel": "Send DOGE",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-send",
+        "no": "cancelled"
+      }
+    },
+    "execute-send": {
+      "type": "info",
+      "content": "Sending {{data.enter-amount.input}} DOGE...",
+      "toolCall": {
+        "name": "wallet_send",
+        "paramMap": {
+          "to": "$data.enter-address.input",
+          "amount": "$data.enter-amount.input",
+          "reason": "$data.enter-reason.input"
+        },
+        "onError": "send-error"
+      },
+      "next": "complete"
+    },
+    "complete": {
+      "type": "info",
+      "content": "✅ Transaction submitted!\n\nSent {{data.enter-amount.input}} DOGE to {{data.enter-address.input}}.",
+      "terminal": true
+    },
+    "send-error": {
+      "type": "info",
+      "content": "❌ Transaction failed. Please check the address and amount, then try again.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Transaction cancelled. No DOGE was sent.",
+      "terminal": true
+    }
+  }
+}

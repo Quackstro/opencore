@@ -30,7 +30,7 @@ var __exportAll = (all, no_symbols) => {
 # ---------------------------------------------------------------------------
 # Fix 1: Inline __exportAll imported from subagent-registry circular chunks
 # ---------------------------------------------------------------------------
-CIRCULAR_PATTERN = re.compile(r'import \{ \w+ as __exportAll \} from "\./subagent-registry-[^"]+\.js";\n')
+CIRCULAR_PATTERN = re.compile(r'import \{ [\w$]+ as __exportAll \} from "\./subagent-registry-[^"]+\.js";\n')
 
 count1 = 0
 for f in glob.glob('dist/**/*.js', recursive=True):
@@ -47,7 +47,7 @@ print(f"[1/2] Patched {count1} files with inlined __exportAll (subagent-registry
 # ---------------------------------------------------------------------------
 # Fix 2: Inline __exportAll imported as reserved word 'in' from reply chunks
 # ---------------------------------------------------------------------------
-RESERVED_PATTERN = re.compile(r'import \{ \w+ as __exportAll \} from "\./reply-[^"]+\.js";\n')
+RESERVED_PATTERN = re.compile(r'import \{ [\w$]+ as __exportAll \} from "\./reply-[^"]+\.js";\n')
 
 count2 = 0
 for f in glob.glob('dist/**/*.js', recursive=True):

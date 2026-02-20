@@ -10,6 +10,7 @@ import type {
   DiagnosticEventPayload,
   DiagnosticMessageProcessedEvent,
   DiagnosticSessionStuckEvent,
+  DiagnosticToolLoopEvent,
   DiagnosticWebhookErrorEvent,
 } from "./diagnostic-events.js";
 import type { IssueCategory } from "./log-monitor-registry.js";
@@ -59,6 +60,15 @@ function convertMessageError(evt: DiagnosticMessageProcessedEvent): DiagnosticIs
   };
 }
 
+function convertToolLoop(evt: DiagnosticToolLoopEvent): DiagnosticIssue {
+  const sessionDesc = evt.sessionKey ?? evt.sessionId ?? "unknown";
+  return {
+    signature: `tool.loop:${sessionDesc}:${evt.toolName}:${evt.detector}`,
+    category: evt.level === "critical" ? "error" : "stuck-session",
+    message: `Tool loop detected in ${sessionDesc}: ${evt.toolName} (${evt.detector}, count=${evt.count}, action=${evt.action}) — ${evt.message}`,
+  };
+}
+
 // ============================================================================
 // Collector
 // ============================================================================
@@ -80,6 +90,9 @@ export function startDiagnosticCollector(onIssue: IssueCallback): () => void {
         break;
       case "message.processed":
         issue = convertMessageError(evt);
+        break;
+      case "tool.loop":
+        issue = convertToolLoop(evt);
         break;
       default:
         break;

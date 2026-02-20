@@ -1,0 +1,64 @@
+{
+  "id": "heal-health-check",
+  "plugin": "heal",
+  "version": "1.0.0",
+  "ttl": 300000,
+  "showProgress": false,
+  "entryPoint": "choose-check",
+  "steps": {
+    "choose-check": {
+      "type": "choice",
+      "content": "🏥 Health Check\n\nWhat would you like to check?",
+      "options": [
+        { "id": "system", "label": "System Health" },
+        { "id": "plugins", "label": "Plugin Status" },
+        { "id": "connectivity", "label": "Connectivity" }
+      ],
+      "transitions": {
+        "system": "execute-system",
+        "plugins": "execute-plugins",
+        "connectivity": "execute-connectivity"
+      }
+    },
+    "execute-system": {
+      "type": "info",
+      "content": "Running system health check...",
+      "toolCall": {
+        "name": "heal_check",
+        "paramMap": { "target": "system" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-plugins": {
+      "type": "info",
+      "content": "Checking plugin health...",
+      "toolCall": {
+        "name": "heal_check",
+        "paramMap": { "target": "plugins" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "execute-connectivity": {
+      "type": "info",
+      "content": "Testing connectivity...",
+      "toolCall": {
+        "name": "heal_check",
+        "paramMap": { "target": "connectivity" },
+        "onError": "error"
+      },
+      "next": "done"
+    },
+    "done": {
+      "type": "info",
+      "content": "✅ Health check complete. Results shown above.",
+      "terminal": true
+    },
+    "error": {
+      "type": "info",
+      "content": "❌ Health check failed. Some services may be unavailable.",
+      "terminal": true
+    }
+  }
+}

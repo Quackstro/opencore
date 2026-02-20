@@ -197,6 +197,22 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "status",
     }),
     defineChatCommand({
+      key: "export-session",
+      nativeName: "export-session",
+      description: "Export current session to HTML file with full system prompt.",
+      textAliases: ["/export-session", "/export"],
+      acceptsArgs: true,
+      category: "status",
+      args: [
+        {
+          name: "path",
+          description: "Output path (default: workspace)",
+          type: "string",
+          required: false,
+        },
+      ],
+    }),
+    defineChatCommand({
       key: "tts",
       nativeName: "tts",
       description: "Control text-to-speech (TTS).",
@@ -249,15 +265,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "subagents",
       nativeName: "subagents",
-      description: "List, kill, log, or steer subagent runs for this session.",
+      description: "List, kill, log, spawn, or steer subagent runs for this session.",
       textAlias: "/subagents",
       category: "management",
       args: [
         {
           name: "action",
-          description: "list | kill | log | info | send | steer",
+          description: "list | kill | log | info | send | steer | spawn",
           type: "string",
-          choices: ["list", "kill", "log", "info", "send", "steer"],
+          choices: ["list", "kill", "log", "info", "send", "steer", "spawn"],
         },
         {
           name: "target",
@@ -311,22 +327,28 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "heal",
       nativeName: "heal",
-      description: "Self-healing agent — diagnose and fix issues automatically.",
+      description:
+        "Self-healing pipeline: monitors errors, auto-resolves known patterns, dispatches AI healing agents.",
       textAlias: "/heal",
       category: "management",
       args: [
         {
           name: "action",
-          description: "approve | reject | list | history | search | test",
+          description: "approve | reject | list | test",
           type: "string",
-          choices: ["list", "history", "approve", "reject", "search", "test"],
+          choices: ["approve", "reject", "list", "test"],
         },
         {
           name: "id",
-          description: "ID, offset, or search query",
+          description: "Approval request ID (or prefix)",
           type: "string",
         },
       ],
+      argsMenu: {
+        arg: "action",
+        title:
+          "🩺 **Self-Healing Pipeline**\nMonitors logs for errors, auto-resolves known patterns, and dispatches AI agents for unresolved issues.\n\nChoose an action:",
+      },
     }),
     defineChatCommand({
       key: "config",
@@ -549,12 +571,31 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "options",
       args: [
         {
-          name: "options",
-          description: "host=... security=... ask=... node=...",
+          name: "host",
+          description: "sandbox, gateway, or node",
+          type: "string",
+          choices: ["sandbox", "gateway", "node"],
+        },
+        {
+          name: "security",
+          description: "deny, allowlist, or full",
+          type: "string",
+          choices: ["deny", "allowlist", "full"],
+        },
+        {
+          name: "ask",
+          description: "off, on-miss, or always",
+          type: "string",
+          choices: ["off", "on-miss", "always"],
+        },
+        {
+          name: "node",
+          description: "Node id or name",
           type: "string",
         },
       ],
       argsParsing: "none",
+      formatArgs: COMMAND_ARG_FORMATTERS.exec,
     }),
     defineChatCommand({
       key: "model",
@@ -611,6 +652,22 @@ function buildChatCommands(): ChatCommandDefinition[] {
       ],
       argsParsing: "none",
       formatArgs: COMMAND_ARG_FORMATTERS.queue,
+    }),
+    defineChatCommand({
+      key: "workflow",
+      description: "Start, cancel, or list workflows.",
+      textAliases: ["/workflow", "/wf"],
+      scope: "text",
+      category: "tools",
+      acceptsArgs: true,
+      argsParsing: "none",
+      args: [
+        {
+          name: "id",
+          description: "Workflow ID or action (list, cancel)",
+          type: "string",
+        },
+      ],
     }),
     defineChatCommand({
       key: "bash",

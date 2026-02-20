@@ -1,0 +1,24 @@
+{
+  "id": "wallet-balance",
+  "plugin": "wallet",
+  "version": "1.0.0",
+  "ttl": 60000,
+  "showProgress": false,
+  "entryPoint": "check",
+  "steps": {
+    "check": {
+      "type": "info",
+      "content": "Checking wallet balance...",
+      "toolCall": {
+        "name": "wallet_balance",
+        "paramMap": {}
+      },
+      "next": "display"
+    },
+    "display": {
+      "type": "info",
+      "content": "💰 Wallet balance retrieved. Check above for details.",
+      "terminal": true
+    }
+  }
+}

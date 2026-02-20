@@ -25,9 +25,9 @@
 
 import os from "node:os";
 import path from "node:path";
-import type { HookHandler } from "../../hooks.js";
 import { resolveStateDir } from "../../../config/paths.js";
 import { guardedAppend } from "../../../logging/circuit-breaker.js";
+import type { HookHandler } from "../../hooks.js";
 
 /**
  * Log all command events to a file

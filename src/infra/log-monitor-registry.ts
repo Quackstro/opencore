@@ -14,7 +14,7 @@ import { loadJsonFile, saveJsonFile } from "./json-file.js";
 // Types
 // ============================================================================
 
-export type IssueCategory = "network" | "crash" | "stuck-session" | "error" | "unknown";
+export type IssueCategory = "network" | "crash" | "stuck-session" | "error" | "security" | "unknown";
 
 export interface IssueRecord {
   signature: string;
@@ -127,10 +127,16 @@ export function createIssueRegistry(config: IssueRegistryConfig): IssueRegistry 
 
     const shouldSurface = meetsThreshold && outsideDedupeWindow;
 
-    // Auto-resolve: only if surfacing AND no recent attempt
+    // Auto-resolve: fire on surface, OR when occurrences cross escalation
+    // thresholds (5, 10, ...) to allow re-evaluation (e.g. failed → needs-agent)
     const recentAutoResolve =
       record.lastAutoResolveMs > 0 && now - record.lastAutoResolveMs < AUTO_RESOLVE_COOLDOWN_MS;
-    const shouldAutoResolve = shouldSurface && config.autoResolve && !recentAutoResolve;
+    const escalationThresholds = [5, 10, 20, 50];
+    const justCrossedThreshold = escalationThresholds.some(
+      (t) => record.occurrences === t,
+    );
+    const shouldAutoResolve =
+      config.autoResolve && !recentAutoResolve && (shouldSurface || justCrossedThreshold);
 
     if (shouldSurface) {
       record.lastSurfacedMs = now;

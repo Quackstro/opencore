@@ -230,6 +230,28 @@ export function detectFix(fullReport: string): { hasFix: boolean; fixDescription
   return { hasFix: true };
 }
 
+/**
+ * Detect if the agent recommends a restart.
+ */
+export function detectRestartNeeded(text: string): boolean {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  const restartSignals = [
+    "restart required",
+    "restart needed",
+    "restart recommended",
+    "needs a restart",
+    "needs restart",
+    "recommend restarting",
+    "should restart",
+    "requires a restart",
+    "requires restart",
+    "reboot required",
+    "reboot needed",
+  ];
+  return restartSignals.some((s) => lower.includes(s));
+}
+
 // ============================================================================
 // Formatted Message Builder
 // ============================================================================
@@ -255,6 +277,7 @@ export function buildCompletionMessage(report: HealingReport): {
     `${statusEmoji} **Healing Agent — ${statusLabel}**`,
     "",
     `${severityEmoji} **Issue:** \`${sigShort}\``,
+    `🆔 **Report:** \`${report.id}\``,
     "",
     `**TL;DR:** ${report.tldr}`,
     ...(report.hasFix && report.fixDescription ? [`\n🔧 **Fix:** ${report.fixDescription}`] : []),
@@ -269,6 +292,16 @@ export function buildCompletionMessage(report: HealingReport): {
   }
   row.push({ text: "🗑 Dismiss", callback_data: `/heal dismiss ${report.id}` });
   buttons.push(row);
+
+  // If fix was applied successfully, offer deploy button to restart gateway with new build
+  // Show Deploy & Restart button if agent applied a fix or recommends restart
+  const needsRestart = report.hasFix || detectRestartNeeded(report.fullReport ?? report.tldr);
+  if (report.success && needsRestart) {
+    buttons.push([
+      { text: "🚀 Deploy & Restart", callback_data: "/deploy_restart" },
+      { text: "⏭️ Skip Deploy", callback_data: "/skip_deploy" },
+    ]);
+  }
 
   return { text, buttons };
 }

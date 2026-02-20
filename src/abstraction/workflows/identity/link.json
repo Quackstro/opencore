@@ -1,0 +1,58 @@
+{
+  "id": "identity-link-claim",
+  "plugin": "identity",
+  "version": "1.0.0",
+  "ttl": 600000,
+  "entryPoint": "enter-code",
+  "steps": {
+    "enter-code": {
+      "type": "text-input",
+      "content": "🔗 Link Accounts\n\nEnter the 6-character link code from your other surface:",
+      "placeholder": "e.g., ABC123",
+      "validation": {
+        "minLength": 6,
+        "maxLength": 6,
+        "pattern": "^[A-Z0-9]{6}$",
+        "errorMessage": "Please enter a valid 6-character code (uppercase letters and numbers)."
+      },
+      "next": "confirm-link"
+    },
+    "confirm-link": {
+      "type": "confirm",
+      "content": "Link this account to the one that generated code {{data.enter-code.input}}?",
+      "confirmLabel": "Link Accounts",
+      "denyLabel": "Cancel",
+      "transitions": {
+        "yes": "execute-link",
+        "no": "cancelled"
+      }
+    },
+    "execute-link": {
+      "type": "info",
+      "content": "Linking accounts...",
+      "toolCall": {
+        "name": "identity_claim_link_code",
+        "paramMap": {
+          "code": "$data.enter-code.input"
+        },
+        "onError": "link-error"
+      },
+      "next": "complete"
+    },
+    "complete": {
+      "type": "info",
+      "content": "✅ Accounts linked successfully!\n\nYour identities are now unified across surfaces. Workflows started on one surface can continue on any linked surface.",
+      "terminal": true
+    },
+    "link-error": {
+      "type": "info",
+      "content": "❌ Failed to link accounts. The code may have expired or already been used. Please try again.",
+      "terminal": true
+    },
+    "cancelled": {
+      "type": "info",
+      "content": "Account linking cancelled.",
+      "terminal": true
+    }
+  }
+}
