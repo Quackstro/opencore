@@ -705,6 +705,13 @@ export class WorkflowEngine {
       }
     }
 
+    // Auto-coerce numeric strings to numbers (workflow text inputs are always strings)
+    for (const [key, value] of Object.entries(params)) {
+      if (typeof value === "string" && value !== "" && !Number.isNaN(Number(value))) {
+        params[key] = Number(value);
+      }
+    }
+
     return params;
   }
 }
