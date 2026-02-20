@@ -23,8 +23,21 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   if (!rest) {
     return {
       ok: false,
-      error:
-        "Usage: /heal list | /heal history [offset] | /heal search <query> | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
+      error: [
+        "🩺 **Self-Healing Agent**",
+        "",
+        "Monitors logs for errors, spawns AI agents to diagnose and fix issues automatically. Issues go through an approval gate before agents are dispatched.",
+        "",
+        "**Commands:**",
+        "• `/heal list` — pending approval requests",
+        "• `/heal history` — past healing reports (paginated)",
+        "• `/heal search <query>` — search reports by keyword",
+        "• `/heal approve <id>` — approve a healing agent dispatch",
+        "• `/heal reject <id>` — reject a pending dispatch",
+        "• `/heal report <id>` — view full report details",
+        "• `/heal dismiss <id>` — acknowledge/dismiss a report",
+        "• `/heal test [low|medium|high]` — run E2E pipeline test",
+      ].join("\n"),
     };
   }
 
