@@ -7,7 +7,7 @@ type ParsedHealCommand =
   | { ok: true; action: "approve"; id: string }
   | { ok: true; action: "reject"; id: string }
   | { ok: true; action: "list" }
-  | { ok: true; action: "history"; limit?: number }
+  | { ok: true; action: "history"; offset: number; search?: string }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -24,7 +24,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
     return {
       ok: false,
       error:
-        "Usage: /heal list | /heal history [N] | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
+        "Usage: /heal list | /heal history [offset] | /heal search <query> | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
     };
   }
 
@@ -36,8 +36,16 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   }
 
   if (action === "history" || action === "log" || action === "past") {
-    const limit = tokens[1] ? parseInt(tokens[1], 10) : undefined;
-    return { ok: true, action: "history", limit: limit && !isNaN(limit) ? limit : undefined };
+    const offset = tokens[1] ? parseInt(tokens[1], 10) : 0;
+    return { ok: true, action: "history", offset: !isNaN(offset) ? Math.max(0, offset) : 0 };
+  }
+
+  if (action === "search" || action === "find" || action === "grep") {
+    const query = tokens.slice(1).join(" ").trim();
+    if (!query) {
+      return { ok: false, error: "Usage: /heal search <query>" };
+    }
+    return { ok: true, action: "history", offset: 0, search: query };
   }
 
   if (action === "test" || action === "simulate") {
@@ -98,7 +106,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   return {
     ok: false,
     error:
-      "Usage: /heal list | /heal history [N] | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
+      "Usage: /heal list | /heal history [offset] | /heal search <query> | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
   };
 }
 
@@ -148,7 +156,7 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
     }
 
     if (parsed.action === "history") {
-      return await handleHealHistory(parsed.limit);
+      return await handleHealHistory(parsed.offset, parsed.search);
     }
 
     if (parsed.action === "test") {
@@ -251,17 +259,42 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 };
 
 /**
- * Show history of all healing reports (completed items).
+ * Show history of all healing reports with offset-based pagination and optional search.
  */
-async function handleHealHistory(limit?: number): Promise<CommandHandlerResult> {
+async function handleHealHistory(offset: number, search?: string): Promise<CommandHandlerResult> {
+  const PAGE_SIZE = 5;
   const { getAllReports } = await import("../../infra/healing-reports.js");
 
-  const reports = getAllReports({ limit: limit ?? 10 });
-  if (reports.length === 0) {
-    return { shouldContinue: false, reply: { text: "No healing reports found." } };
+  let allReports = getAllReports();
+
+  // Apply search filter if provided
+  if (search) {
+    const q = search.toLowerCase();
+    allReports = allReports.filter(
+      (r) =>
+        r.issueSignature.toLowerCase().includes(q) ||
+        r.tldr.toLowerCase().includes(q) ||
+        r.fullReport.toLowerCase().includes(q) ||
+        r.id.toLowerCase().startsWith(q),
+    );
   }
 
-  const lines = reports.map((r) => {
+  if (allReports.length === 0) {
+    const msg = search ? `No healing reports matching "${search}".` : "No healing reports found.";
+    return { shouldContinue: false, reply: { text: msg } };
+  }
+
+  // Clamp offset
+  if (offset >= allReports.length) {
+    offset = Math.max(0, Math.floor((allReports.length - 1) / PAGE_SIZE) * PAGE_SIZE);
+  }
+
+  const page = Math.floor(offset / PAGE_SIZE) + 1;
+  const totalPages = Math.ceil(allReports.length / PAGE_SIZE);
+  const pageReports = allReports.slice(offset, offset + PAGE_SIZE);
+  const hasMore = allReports.length > offset + PAGE_SIZE;
+
+  const lines = pageReports.map((r) => {
     const statusEmoji = r.success ? "✅" : "❌";
     const severityEmoji = r.severity === "high" ? "🔴" : r.severity === "medium" ? "🟡" : "🟢";
     const ackLabel = r.acknowledged ? "dismissed" : "active";
@@ -271,16 +304,31 @@ async function handleHealHistory(limit?: number): Promise<CommandHandlerResult> 
     return `${statusEmoji}${severityEmoji} \`${r.id.slice(0, 8)}\` ${date} — ${sigShort} _(${ackLabel})_`;
   });
 
-  const buttons = reports
+  const searchSuffix = search ? ` matching "${search}"` : "";
+  const header = `**Healing History** (page ${page}/${totalPages}, ${allReports.length} items${searchSuffix})`;
+
+  // Build navigation buttons
+  const navRow: Array<{ text: string; callback_data: string }> = [];
+  if (hasMore) {
+    const nextCmd = search
+      ? `/heal search ${search}` // search doesn't paginate via offset yet — show all matches
+      : `/heal history ${offset + PAGE_SIZE}`;
+    navRow.push({ text: "📜 Show More", callback_data: nextCmd });
+  }
+  navRow.push({ text: "🔍 Search", callback_data: "/heal search" });
+
+  // Report buttons for unacknowledged items on this page
+  const reportRows = pageReports
     .filter((r) => !r.acknowledged)
-    .slice(0, 5)
     .map((r) => [{ text: `📋 ${r.id.slice(0, 8)}`, callback_data: `/heal report ${r.id}` }]);
+
+  const buttons = [navRow, ...reportRows];
 
   return {
     shouldContinue: false,
     reply: {
-      text: `**Healing History** (${reports.length} items):\n\n${lines.join("\n")}`,
-      ...(buttons.length > 0 ? { channelData: { telegram: { buttons } } } : {}),
+      text: `${header}\n\n${lines.join("\n")}`,
+      channelData: { telegram: { buttons } },
     },
   };
 }
