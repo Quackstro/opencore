@@ -7,6 +7,7 @@ type ParsedHealCommand =
   | { ok: true; action: "approve"; id: string }
   | { ok: true; action: "reject"; id: string }
   | { ok: true; action: "list" }
+  | { ok: true; action: "history"; limit?: number }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -23,7 +24,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
     return {
       ok: false,
       error:
-        "Usage: /heal approve <id> | /heal reject <id> | /heal list | /heal test [low|medium|high]",
+        "Usage: /heal list | /heal history [N] | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
     };
   }
 
@@ -32,6 +33,11 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
 
   if (action === "list" || action === "ls" || action === "pending") {
     return { ok: true, action: "list" };
+  }
+
+  if (action === "history" || action === "log" || action === "past") {
+    const limit = tokens[1] ? parseInt(tokens[1], 10) : undefined;
+    return { ok: true, action: "history", limit: limit && !isNaN(limit) ? limit : undefined };
   }
 
   if (action === "test" || action === "simulate") {
@@ -92,7 +98,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
   return {
     ok: false,
     error:
-      "Usage: /heal approve <id> | /heal reject <id> | /heal list | /heal test [low|medium|high]",
+      "Usage: /heal list | /heal history [N] | /heal approve <id> | /heal reject <id> | /heal test [low|medium|high]",
   };
 }
 
@@ -139,6 +145,10 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
           text: "🔧 Apply fix is not yet implemented — review the full report and apply manually, or ask me to help.",
         },
       };
+    }
+
+    if (parsed.action === "history") {
+      return await handleHealHistory(parsed.limit);
     }
 
     if (parsed.action === "test") {
@@ -239,6 +249,41 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 
   return null;
 };
+
+/**
+ * Show history of all healing reports (completed items).
+ */
+async function handleHealHistory(limit?: number): Promise<CommandHandlerResult> {
+  const { getAllReports } = await import("../../infra/healing-reports.js");
+
+  const reports = getAllReports({ limit: limit ?? 10 });
+  if (reports.length === 0) {
+    return { shouldContinue: false, reply: { text: "No healing reports found." } };
+  }
+
+  const lines = reports.map((r) => {
+    const statusEmoji = r.success ? "✅" : "❌";
+    const severityEmoji = r.severity === "high" ? "🔴" : r.severity === "medium" ? "🟡" : "🟢";
+    const ackLabel = r.acknowledged ? "dismissed" : "active";
+    const date = r.completedAt.slice(0, 10);
+    const sigShort =
+      r.issueSignature.length > 35 ? `${r.issueSignature.slice(0, 35)}…` : r.issueSignature;
+    return `${statusEmoji}${severityEmoji} \`${r.id.slice(0, 8)}\` ${date} — ${sigShort} _(${ackLabel})_`;
+  });
+
+  const buttons = reports
+    .filter((r) => !r.acknowledged)
+    .slice(0, 5)
+    .map((r) => [{ text: `📋 ${r.id.slice(0, 8)}`, callback_data: `/heal report ${r.id}` }]);
+
+  return {
+    shouldContinue: false,
+    reply: {
+      text: `**Healing History** (${reports.length} items):\n\n${lines.join("\n")}`,
+      ...(buttons.length > 0 ? { channelData: { telegram: { buttons } } } : {}),
+    },
+  };
+}
 
 /**
  * Show the full report for a healing report ID.

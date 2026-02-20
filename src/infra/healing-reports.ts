@@ -108,6 +108,26 @@ export function getUnacknowledgedReports(): HealingReport[] {
   return reports;
 }
 
+/** Get all reports (both acknowledged and unacknowledged), newest first. */
+export function getAllReports(opts?: { limit?: number }): HealingReport[] {
+  ensureDir();
+  const files = fs.readdirSync(REPORTS_DIR).filter((f) => f.endsWith(".json"));
+  const reports: HealingReport[] = [];
+  for (const file of files) {
+    try {
+      const raw = fs.readFileSync(path.join(REPORTS_DIR, file), "utf-8");
+      reports.push(JSON.parse(raw) as HealingReport);
+    } catch {
+      // skip corrupt files
+    }
+  }
+  reports.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  if (opts?.limit && opts.limit > 0) {
+    return reports.slice(0, opts.limit);
+  }
+  return reports;
+}
+
 /** Clean up old acknowledged reports (older than N days). */
 export function pruneOldReports(maxAgeDays = 7): number {
   ensureDir();
