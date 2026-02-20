@@ -556,15 +556,18 @@ export class WorkflowEngine {
     const includeCancel = true;
 
     switch (step.type) {
-      case "choice":
+      case "choice": {
+        const options = step.options ?? [];
+        const hasCancel = options.some((o) => o.id === "cancel");
         return {
           type: "choice" as const,
           content,
-          options: step.options ?? [],
+          options,
           includeBack,
-          includeCancel,
+          includeCancel: includeCancel && !hasCancel,
           progress,
         };
+      }
       case "multi-choice":
         return {
           type: "multi-choice" as const,
@@ -584,7 +587,7 @@ export class WorkflowEngine {
           confirmLabel: step.confirmLabel ?? "Yes",
           denyLabel: step.denyLabel ?? "No",
           includeBack,
-          includeCancel,
+          includeCancel: false, // deny button serves as cancel
           progress,
         };
       case "text-input":
