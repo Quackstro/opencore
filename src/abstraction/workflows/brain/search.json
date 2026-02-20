@@ -35,8 +35,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Search failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-search",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Search failed. Please try again.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

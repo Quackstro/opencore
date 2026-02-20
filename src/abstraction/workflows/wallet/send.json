@@ -1,7 +1,7 @@
 {
   "id": "wallet-send",
   "plugin": "wallet",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "ttl": 600000,
   "entryPoint": "enter-address",
   "steps": {
@@ -50,7 +50,7 @@
     },
     "execute-send": {
       "type": "info",
-      "content": "Sending {{data.enter-amount.input}} DOGE...",
+      "content": "⏳ Sending {{data.enter-amount.input}} DOGE...",
       "toolCall": {
         "name": "wallet_send",
         "paramMap": {
@@ -68,9 +68,31 @@
       "terminal": true
     },
     "send-error": {
-      "type": "info",
-      "content": "❌ Transaction failed. Please check the address and amount, then try again.",
-      "terminal": true
+      "type": "choice",
+      "content": "❌ Transaction failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "edit",
+          "label": "✏️ Edit Details"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-send",
+        "edit": "enter-address",
+        "cancel": "cancelled"
+      }
     },
     "cancelled": {
       "type": "info",

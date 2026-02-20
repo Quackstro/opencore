@@ -109,8 +109,9 @@ function stepsToTerminal(
 function interpolate(
   template: string,
   data: Record<string, StepData>,
+  extra?: Record<string, string>,
 ): string {
-  return template.replace(/\{\{data\.([^}]+)\}\}/g, (_match, path: string) => {
+  let result = template.replace(/\{\{data\.([^}]+)\}\}/g, (_match, path: string) => {
     const parts = path.split(".");
     const stepId = parts[0];
     const field = parts[1] ?? "input"; // default to .input
@@ -125,6 +126,11 @@ function interpolate(
     }
     return "";
   });
+  // Replace simple {{key}} tokens from extra context (e.g. {{error}})
+  if (extra) {
+    result = result.replace(/\{\{(\w+)\}\}/g, (_match, key: string) => extra[key] ?? "");
+  }
+  return result;
 }
 
 // ─── Workflow SDK / Engine ───────────────────────────────────────────────────
@@ -375,16 +381,20 @@ export class WorkflowEngine {
       const result = await this.toolExecutor(step.toolCall.name, params);
       if (!result.success) {
         const errMsg = result.error ?? "Tool call failed. Please try again.";
-        const adapter = this.resolveAdapter(surface.surfaceId);
-        if (adapter) {
-          await adapter.sendMessage(surface, { text: errMsg });
-        }
+        // Store error in state data so {{error}} resolves in error step templates
+        state.data.__error = { input: errMsg, timestamp: new Date().toISOString() };
         // Stay on current step or go to onError step
         if (step.toolCall.onError) {
           state.stepHistory.push(state.currentStep);
           state.currentStep = step.toolCall.onError;
           this.stateManager.update(state);
           await this.renderStep(state, def, surface);
+        } else {
+          // No onError step — send error directly
+          const adapter = this.resolveAdapter(surface.surfaceId);
+          if (adapter) {
+            await adapter.sendMessage(surface, { text: errMsg });
+          }
         }
         return {
           outcome: "tool-error",
@@ -423,10 +433,7 @@ export class WorkflowEngine {
         const infoResult = await this.toolExecutor(nextStep.toolCall.name, infoParams);
         if (!infoResult.success) {
           const errMsg = infoResult.error ?? "Tool call failed.";
-          const adapter = this.resolveAdapter(surface.surfaceId);
-          if (adapter) {
-            await adapter.sendMessage(surface, { text: errMsg });
-          }
+          state.data.__error = { input: errMsg, timestamp: new Date().toISOString() };
           if (nextStep.toolCall.onError) {
             state.stepHistory.push(state.currentStep);
             state.currentStep = nextStep.toolCall.onError;
@@ -472,7 +479,11 @@ export class WorkflowEngine {
     if (!adapter) {return null;}
 
     const progress = computeProgress(def, state.currentStep, state.stepHistory);
-    const content = interpolate(step.content, state.data);
+    const extra: Record<string, string> = {};
+    if (state.data.__error?.input) {
+      extra.error = state.data.__error.input;
+    }
+    const content = interpolate(step.content, state.data, extra);
     const primitive = this.stepToPrimitive(step, content, progress, state);
 
     // Negotiate capability

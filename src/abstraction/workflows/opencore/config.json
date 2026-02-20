@@ -9,9 +9,18 @@
       "type": "choice",
       "content": "⚙️ Configuration\n\nWhat would you like to configure?",
       "options": [
-        { "id": "view", "label": "View Current Config" },
-        { "id": "set", "label": "Set a Config Value" },
-        { "id": "channel", "label": "Channel Setup" }
+        {
+          "id": "view",
+          "label": "View Current Config"
+        },
+        {
+          "id": "set",
+          "label": "Set a Config Value"
+        },
+        {
+          "id": "channel",
+          "label": "Channel Setup"
+        }
       ],
       "transitions": {
         "view": "execute-view",
@@ -24,7 +33,9 @@
       "content": "Loading configuration...",
       "toolCall": {
         "name": "opencore_config",
-        "paramMap": { "action": "view" },
+        "paramMap": {
+          "action": "view"
+        },
         "onError": "error"
       },
       "next": "view-done"
@@ -120,8 +131,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Configuration operation failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-view",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Configuration operation failed.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

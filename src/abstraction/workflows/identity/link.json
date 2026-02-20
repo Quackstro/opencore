@@ -45,13 +45,35 @@
       "terminal": true
     },
     "link-error": {
-      "type": "info",
-      "content": "❌ Failed to link accounts. The code may have expired or already been used. Please try again.",
-      "terminal": true
+      "type": "choice",
+      "content": "❌ Failed to link accounts. The code may have expired or already been used.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-link",
+        "cancel": "link-error-cancelled"
+      }
     },
     "cancelled": {
       "type": "info",
       "content": "Account linking cancelled.",
+      "terminal": true
+    },
+    "link-error-cancelled": {
+      "type": "info",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

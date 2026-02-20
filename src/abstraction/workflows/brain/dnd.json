@@ -9,9 +9,18 @@
       "type": "choice",
       "content": "🔕 Do Not Disturb\n\nManage DND mode:",
       "options": [
-        { "id": "on", "label": "Enable DND" },
-        { "id": "off", "label": "Disable DND" },
-        { "id": "status", "label": "Check Status" }
+        {
+          "id": "on",
+          "label": "Enable DND"
+        },
+        {
+          "id": "off",
+          "label": "Disable DND"
+        },
+        {
+          "id": "status",
+          "label": "Check Status"
+        }
       ],
       "transitions": {
         "on": "execute-on",
@@ -24,7 +33,9 @@
       "content": "Enabling DND...",
       "toolCall": {
         "name": "brain_dnd",
-        "paramMap": { "action": "on" },
+        "paramMap": {
+          "action": "on"
+        },
         "onError": "error"
       },
       "next": "done-on"
@@ -39,7 +50,9 @@
       "content": "Disabling DND...",
       "toolCall": {
         "name": "brain_dnd",
-        "paramMap": { "action": "off" },
+        "paramMap": {
+          "action": "off"
+        },
         "onError": "error"
       },
       "next": "done-off"
@@ -54,7 +67,9 @@
       "content": "Checking DND status...",
       "toolCall": {
         "name": "brain_dnd",
-        "paramMap": { "action": "status" },
+        "paramMap": {
+          "action": "status"
+        },
         "onError": "error"
       },
       "next": "done-status"
@@ -65,8 +80,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ DND operation failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-on",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ DND operation failed.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

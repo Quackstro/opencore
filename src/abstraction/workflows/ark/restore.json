@@ -60,8 +60,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Restore failed. Please check the filename and passphrase.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-restore",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Restore failed. Please check the filename and passphrase.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

@@ -9,10 +9,22 @@
       "type": "choice",
       "content": "📊 Financial Reports\n\nSelect a report type:",
       "options": [
-        { "id": "spending", "label": "Spending Report" },
-        { "id": "net-worth", "label": "Net Worth" },
-        { "id": "balances", "label": "Account Balances" },
-        { "id": "ytd", "label": "Year-to-Date" }
+        {
+          "id": "spending",
+          "label": "Spending Report"
+        },
+        {
+          "id": "net-worth",
+          "label": "Net Worth"
+        },
+        {
+          "id": "balances",
+          "label": "Account Balances"
+        },
+        {
+          "id": "ytd",
+          "label": "Year-to-Date"
+        }
       ],
       "transitions": {
         "spending": "enter-spending-period",
@@ -49,7 +61,9 @@
       "content": "Calculating net worth...",
       "toolCall": {
         "name": "ledger_report",
-        "paramMap": { "action": "netWorth" },
+        "paramMap": {
+          "action": "netWorth"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -59,7 +73,9 @@
       "content": "Fetching account balances...",
       "toolCall": {
         "name": "ledger_report",
-        "paramMap": { "action": "balances" },
+        "paramMap": {
+          "action": "balances"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -69,7 +85,9 @@
       "content": "Generating year-to-date report...",
       "toolCall": {
         "name": "ledger_report",
-        "paramMap": { "action": "ytd" },
+        "paramMap": {
+          "action": "ytd"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -80,8 +98,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Report generation failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-spending",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Report generation failed. Please try again.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

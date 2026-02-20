@@ -9,9 +9,18 @@
       "type": "choice",
       "content": "💰 Budget Management\n\nWhat would you like to do?",
       "options": [
-        { "id": "set-category", "label": "Set Category Budget" },
-        { "id": "set-monthly", "label": "Set Monthly Total" },
-        { "id": "view-status", "label": "View Budget Status" }
+        {
+          "id": "set-category",
+          "label": "Set Category Budget"
+        },
+        {
+          "id": "set-monthly",
+          "label": "Set Monthly Total"
+        },
+        {
+          "id": "view-status",
+          "label": "View Budget Status"
+        }
       ],
       "transitions": {
         "set-category": "enter-category",
@@ -141,8 +150,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Budget operation failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-set-category",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Budget operation failed. Please try again.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }

@@ -10,9 +10,18 @@
       "type": "choice",
       "content": "🏥 Health Check\n\nWhat would you like to check?",
       "options": [
-        { "id": "system", "label": "System Health" },
-        { "id": "plugins", "label": "Plugin Status" },
-        { "id": "connectivity", "label": "Connectivity" }
+        {
+          "id": "system",
+          "label": "System Health"
+        },
+        {
+          "id": "plugins",
+          "label": "Plugin Status"
+        },
+        {
+          "id": "connectivity",
+          "label": "Connectivity"
+        }
       ],
       "transitions": {
         "system": "execute-system",
@@ -25,7 +34,9 @@
       "content": "Running system health check...",
       "toolCall": {
         "name": "heal_check",
-        "paramMap": { "target": "system" },
+        "paramMap": {
+          "target": "system"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -35,7 +46,9 @@
       "content": "Checking plugin health...",
       "toolCall": {
         "name": "heal_check",
-        "paramMap": { "target": "plugins" },
+        "paramMap": {
+          "target": "plugins"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -45,7 +58,9 @@
       "content": "Testing connectivity...",
       "toolCall": {
         "name": "heal_check",
-        "paramMap": { "target": "connectivity" },
+        "paramMap": {
+          "target": "connectivity"
+        },
         "onError": "error"
       },
       "next": "done"
@@ -56,8 +71,30 @@
       "terminal": true
     },
     "error": {
+      "type": "choice",
+      "content": "❌ Health check failed. Some services may be unavailable.\n\n{{error}}\n\nWhat would you like to do?",
+      "options": [
+        {
+          "id": "retry",
+          "label": "🔄 Retry",
+          "style": "primary"
+        },
+        {
+          "id": "cancel",
+          "label": "❌ Cancel",
+          "style": "danger"
+        }
+      ],
+      "includeBack": false,
+      "includeCancel": false,
+      "transitions": {
+        "retry": "execute-system",
+        "cancel": "error-cancelled"
+      }
+    },
+    "error-cancelled": {
       "type": "info",
-      "content": "❌ Health check failed. Some services may be unavailable.",
+      "content": "Operation cancelled.",
       "terminal": true
     }
   }
