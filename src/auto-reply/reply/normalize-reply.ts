@@ -2,6 +2,7 @@ import { sanitizeUserFacingText } from "../../agents/pi-embedded-helpers.js";
 import { stripHeartbeatToken } from "../heartbeat.js";
 import { HEARTBEAT_TOKEN, isSilentReplyText, SILENT_REPLY_TOKEN } from "../tokens.js";
 import type { ReplyPayload } from "../types.js";
+import { hasInlineButtonDirectives, parseInlineButtonDirectives } from "./inline-button-directives.js";
 import { hasLineDirectives, parseLineDirectives } from "./line-directives.js";
 import {
   resolveResponsePrefixTemplate,
@@ -69,8 +70,14 @@ export function normalizeReplyPayload(
     return null;
   }
 
-  // Parse LINE-specific directives from text (quick_replies, location, confirm, buttons)
+  // Parse inline button directives from agent text (e.g. [[buttons: Label:/callback]])
   let enrichedPayload: ReplyPayload = { ...payload, text };
+  if (text && hasInlineButtonDirectives(text)) {
+    enrichedPayload = parseInlineButtonDirectives(enrichedPayload);
+    text = enrichedPayload.text;
+  }
+
+  // Parse LINE-specific directives from text (quick_replies, location, confirm, buttons)
   if (text && hasLineDirectives(text)) {
     enrichedPayload = parseLineDirectives(enrichedPayload);
     text = enrichedPayload.text;
