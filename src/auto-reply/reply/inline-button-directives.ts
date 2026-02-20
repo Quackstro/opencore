@@ -82,6 +82,24 @@ export function parseInlineButtonDirectives(payload: ReplyPayload): ReplyPayload
 
   if (rows.length === 0) return payload;
 
+  // Auto-stack: if a single row has buttons whose labels are too long,
+  // split into one button per row for readability.
+  const AUTO_STACK_CHAR_THRESHOLD = 30; // total chars across all labels in a row
+  const finalRows: InlineButton[][] = [];
+  for (const row of rows) {
+    const totalLabelChars = row.reduce((sum, b) => sum + b.text.length, 0);
+    if (row.length > 1 && totalLabelChars > AUTO_STACK_CHAR_THRESHOLD) {
+      // Stack each button into its own row
+      for (const btn of row) {
+        finalRows.push([btn]);
+      }
+    } else {
+      finalRows.push(row);
+    }
+  }
+  rows.length = 0;
+  rows.push(...finalRows);
+
   text = text.trim();
 
   const existing = (payload.channelData ?? {}) as Record<string, unknown>;
