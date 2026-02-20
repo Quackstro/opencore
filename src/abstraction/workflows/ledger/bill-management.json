@@ -42,7 +42,7 @@
     },
     "upcoming-done": {
       "type": "info",
-      "content": "📋 Upcoming bills shown above.",
+      "content": "📋 Upcoming bills shown above\n\n{{result}}",
       "terminal": true
     },
     "execute-detect": {
@@ -59,7 +59,7 @@
     },
     "detect-done": {
       "type": "info",
-      "content": "🔍 Recurring charge detection complete. See results above.",
+      "content": "🔍 Recurring charge detection complete. See results above\n\n{{result}}",
       "terminal": true
     },
     "enter-bill-name": {
@@ -121,7 +121,7 @@
     },
     "add-done": {
       "type": "info",
-      "content": "✅ Bill added: {{data.enter-bill-name.input}} — ${{data.enter-bill-amount.input}} on day {{data.enter-bill-day.input}}",
+      "content": "✅ Bill added: {{data.enter-bill-name.input}} — ${{data.enter-bill-amount.input}} on day {{data.enter-bill-day.input}}\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

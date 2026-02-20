@@ -17,7 +17,7 @@
     },
     "display": {
       "type": "info",
-      "content": "🔗 Your link code is ready.\n\nEnter this code on your other surface within 10 minutes:\n\nUse `/link <code>` on the other platform to link your accounts.",
+      "content": "🔗 Your link code is ready.\n\nEnter this code on your other surface within 10 minutes:\n\nUse `/link <code>` on the other platform to link your accounts\n\n{{result}}",
       "terminal": true
     }
   }

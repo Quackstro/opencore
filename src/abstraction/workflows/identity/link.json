@@ -41,7 +41,7 @@
     },
     "complete": {
       "type": "info",
-      "content": "✅ Accounts linked successfully!\n\nYour identities are now unified across surfaces. Workflows started on one surface can continue on any linked surface.",
+      "content": "✅ Accounts linked successfully!\n\nYour identities are now unified across surfaces. Workflows started on one surface can continue on any linked surface\n\n{{result}}",
       "terminal": true
     },
     "link-error": {

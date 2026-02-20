@@ -27,7 +27,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Update complete. Check status above.",
+      "content": "✅ Update complete. Check status above\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

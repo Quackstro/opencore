@@ -106,6 +106,19 @@ function stepsToTerminal(
 
 // ─── Template interpolation ─────────────────────────────────────────────────
 
+/** Extract display text from tool result content (array or string). */
+function extractToolResultText(content: unknown): string | undefined {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    const texts = content
+      .filter((c): c is { type: string; text: string } =>
+        typeof c === "object" && c !== null && c.type === "text" && typeof c.text === "string")
+      .map((c) => c.text);
+    return texts.length > 0 ? texts.join("\n") : undefined;
+  }
+  return undefined;
+}
+
 function interpolate(
   template: string,
   data: Record<string, StepData>,
@@ -404,6 +417,11 @@ export class WorkflowEngine {
         };
       }
       toolResult = result.result;
+      // Store tool result in state for template interpolation
+      const resultText = extractToolResultText(result.result);
+      if (resultText) {
+        state.data.__toolResult = { input: resultText, timestamp: new Date().toISOString() };
+      }
     }
 
     // Resolve next step
@@ -448,6 +466,10 @@ export class WorkflowEngine {
           return { outcome: "tool-error", state, error: errMsg, toolResult: infoResult.result };
         }
         if (!toolResult) {toolResult = infoResult.result;}
+        const infoResultText = extractToolResultText(infoResult.result);
+        if (infoResultText) {
+          state.data.__toolResult = { input: infoResultText, timestamp: new Date().toISOString() };
+        }
       }
       state.stepHistory.push(state.currentStep);
       state.currentStep = nextStep.next;
@@ -482,6 +504,9 @@ export class WorkflowEngine {
     const extra: Record<string, string> = {};
     if (state.data.__error?.input) {
       extra.error = state.data.__error.input;
+    }
+    if (state.data.__toolResult?.input) {
+      extra.result = state.data.__toolResult.input;
     }
     const content = interpolate(step.content, state.data, extra);
     const primitive = this.stepToPrimitive(step, content, progress, state);

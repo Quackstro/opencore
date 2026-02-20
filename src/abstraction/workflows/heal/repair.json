@@ -29,7 +29,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Repair complete. Check results above.",
+      "content": "✅ Repair complete. Check results above\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

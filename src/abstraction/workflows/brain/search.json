@@ -31,7 +31,7 @@
     },
     "done": {
       "type": "info",
-      "content": "🔍 Search results shown above.",
+      "content": "🔍 Search results shown above\n\n{{result}}",
       "terminal": true
     },
     "error": {

@@ -99,7 +99,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Done. See results above.",
+      "content": "✅ Done. See results above\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

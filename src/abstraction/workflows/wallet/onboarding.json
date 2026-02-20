@@ -39,7 +39,7 @@
     },
     "complete": {
       "type": "info",
-      "content": "🎉 Your DOGE Wallet is Ready!\n\nYour recovery phrase has been sent via secure DM.\n\n📋 Quick commands:\n• Check balance — ask about your wallet balance\n• Send DOGE — tell me who to pay and how much\n• View history — ask for recent transactions\n\n💡 Tip: Start with a small test deposit (~10 DOGE)\n\nMuch wallet. Very ready. Wow. 🐕",
+      "content": "🎉 Your DOGE Wallet is Ready!\n\nYour recovery phrase has been sent via secure DM.\n\n📋 Quick commands:\n• Check balance — ask about your wallet balance\n• Send DOGE — tell me who to pay and how much\n• View history — ask for recent transactions\n\n💡 Tip: Start with a small test deposit (~10 DOGE)\n\nMuch wallet. Very ready. Wow. 🐕\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

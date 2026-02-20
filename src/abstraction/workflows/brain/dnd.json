@@ -42,7 +42,7 @@
     },
     "done-on": {
       "type": "info",
-      "content": "🔕 DND enabled. Brain notifications are silenced.",
+      "content": "🔕 DND enabled. Brain notifications are silenced\n\n{{result}}",
       "terminal": true
     },
     "execute-off": {
@@ -59,7 +59,7 @@
     },
     "done-off": {
       "type": "info",
-      "content": "🔔 DND disabled. Brain notifications are active.",
+      "content": "🔔 DND disabled. Brain notifications are active\n\n{{result}}",
       "terminal": true
     },
     "execute-status": {
@@ -76,7 +76,7 @@
     },
     "done-status": {
       "type": "info",
-      "content": "📊 DND status shown above.",
+      "content": "📊 DND status shown above\n\n{{result}}",
       "terminal": true
     },
     "error": {

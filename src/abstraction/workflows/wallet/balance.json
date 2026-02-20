@@ -17,7 +17,7 @@
     },
     "display": {
       "type": "info",
-      "content": "💰 Wallet balance retrieved. Check above for details.",
+      "content": "💰 Wallet balance retrieved. Check above for details\n\n{{result}}",
       "terminal": true
     }
   }

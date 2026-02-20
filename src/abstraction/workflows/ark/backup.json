@@ -40,7 +40,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Backup created successfully. Keep your passphrase safe — you'll need it to restore.",
+      "content": "✅ Backup created successfully. Keep your passphrase safe — you'll need it to restore\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

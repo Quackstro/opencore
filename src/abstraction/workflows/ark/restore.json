@@ -51,7 +51,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Backup restored successfully from {{data.enter-file.input}}.",
+      "content": "✅ Backup restored successfully from {{data.enter-file.input}}\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

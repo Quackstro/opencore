@@ -75,7 +75,7 @@
     },
     "category-done": {
       "type": "info",
-      "content": "✅ Budget set: **{{data.enter-category.input}}** → ${{data.enter-category-amount.input}}",
+      "content": "✅ Budget set: **{{data.enter-category.input}}** → ${{data.enter-category-amount.input}}\n\n{{result}}",
       "terminal": true
     },
     "enter-monthly-amount": {
@@ -113,7 +113,7 @@
     },
     "monthly-done": {
       "type": "info",
-      "content": "✅ Monthly budget set to ${{data.enter-monthly-amount.input}}",
+      "content": "✅ Monthly budget set to ${{data.enter-monthly-amount.input}}\n\n{{result}}",
       "terminal": true
     },
     "enter-status-period": {
@@ -141,7 +141,7 @@
     },
     "status-done": {
       "type": "info",
-      "content": "📊 Budget status retrieved. See above for details.",
+      "content": "📊 Budget status retrieved. See above for details\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

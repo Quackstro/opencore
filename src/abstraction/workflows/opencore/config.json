@@ -42,7 +42,7 @@
     },
     "view-done": {
       "type": "info",
-      "content": "⚙️ Configuration shown above.",
+      "content": "⚙️ Configuration shown above\n\n{{result}}",
       "terminal": true
     },
     "enter-key": {
@@ -93,7 +93,7 @@
     },
     "set-done": {
       "type": "info",
-      "content": "✅ Config updated: **{{data.enter-key.input}}** = `{{data.enter-value.input}}`",
+      "content": "✅ Config updated: **{{data.enter-key.input}}** = `{{data.enter-value.input}}`\n\n{{result}}",
       "terminal": true
     },
     "enter-channel": {
@@ -122,7 +122,7 @@
     },
     "channel-done": {
       "type": "info",
-      "content": "✅ Channel setup complete for {{data.enter-channel.input}}.",
+      "content": "✅ Channel setup complete for {{data.enter-channel.input}}\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

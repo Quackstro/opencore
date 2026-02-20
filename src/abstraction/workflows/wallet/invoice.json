@@ -50,7 +50,7 @@
     },
     "complete": {
       "type": "info",
-      "content": "✅ Invoice created for {{data.enter-amount.input}} DOGE.\n\nShare the invoice details with the payer.",
+      "content": "✅ Invoice created for {{data.enter-amount.input}} DOGE.\n\nShare the invoice details with the payer\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {

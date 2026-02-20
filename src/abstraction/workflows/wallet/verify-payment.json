@@ -52,7 +52,7 @@
     },
     "complete": {
       "type": "info",
-      "content": "✅ Payment verification complete. Check above for results.",
+      "content": "✅ Payment verification complete. Check above for results\n\n{{result}}",
       "terminal": true
     }
   }

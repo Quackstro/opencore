@@ -7,7 +7,7 @@
   "steps": {
     "enter-address": {
       "type": "text-input",
-      "content": "📤 Send DOGE\n\nEnter the recipient's DOGE address:",
+      "content": "\ud83d\udce4 Send DOGE\n\nEnter the recipient's DOGE address:",
       "placeholder": "D...",
       "validation": {
         "minLength": 26,
@@ -40,7 +40,7 @@
     },
     "confirm-send": {
       "type": "confirm",
-      "content": "📤 Confirm Transaction\n\nSend {{data.enter-amount.input}} DOGE\nTo: {{data.enter-address.input}}\nReason: {{data.enter-reason.input}}\n\nProceed?",
+      "content": "\ud83d\udce4 Confirm Transaction\n\nSend {{data.enter-amount.input}} DOGE\nTo: {{data.enter-address.input}}\nReason: {{data.enter-reason.input}}\n\nProceed?",
       "confirmLabel": "Send DOGE",
       "denyLabel": "Cancel",
       "transitions": {
@@ -50,7 +50,7 @@
     },
     "execute-send": {
       "type": "info",
-      "content": "⏳ Sending {{data.enter-amount.input}} DOGE...",
+      "content": "\u23f3 Sending {{data.enter-amount.input}} DOGE...",
       "toolCall": {
         "name": "wallet_send",
         "paramMap": {
@@ -64,25 +64,25 @@
     },
     "complete": {
       "type": "info",
-      "content": "✅ Transaction submitted!\n\nSent {{data.enter-amount.input}} DOGE to {{data.enter-address.input}}.",
+      "content": "\u2705 Transaction submitted!\n\n{{result}}",
       "terminal": true
     },
     "send-error": {
       "type": "choice",
-      "content": "❌ Transaction failed.\n\n{{error}}\n\nWhat would you like to do?",
+      "content": "\u274c Transaction failed.\n\n{{error}}\n\nWhat would you like to do?",
       "options": [
         {
           "id": "retry",
-          "label": "🔄 Retry",
+          "label": "\ud83d\udd04 Retry",
           "style": "primary"
         },
         {
           "id": "edit",
-          "label": "✏️ Edit Details"
+          "label": "\u270f\ufe0f Edit Details"
         },
         {
           "id": "cancel",
-          "label": "❌ Cancel",
+          "label": "\u274c Cancel",
           "style": "danger"
         }
       ],

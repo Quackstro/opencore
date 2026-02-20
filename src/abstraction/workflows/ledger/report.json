@@ -94,7 +94,7 @@
     },
     "done": {
       "type": "info",
-      "content": "📊 Report generated. See above for details.",
+      "content": "📊 Report generated. See above for details\n\n{{result}}",
       "terminal": true
     },
     "error": {

@@ -17,7 +17,7 @@
     },
     "done": {
       "type": "info",
-      "content": "📊 OpenCore status shown above.",
+      "content": "📊 OpenCore status shown above\n\n{{result}}",
       "terminal": true
     }
   }

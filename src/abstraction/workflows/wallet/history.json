@@ -19,7 +19,7 @@
     },
     "display": {
       "type": "info",
-      "content": "📜 Transaction history retrieved. Check above for details.",
+      "content": "📜 Transaction history retrieved. Check above for details\n\n{{result}}",
       "terminal": true
     }
   }

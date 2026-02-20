@@ -32,7 +32,7 @@
     },
     "done": {
       "type": "info",
-      "content": "🔍 Search complete. Results shown above.",
+      "content": "🔍 Search complete. Results shown above\n\n{{result}}",
       "terminal": true
     },
     "error": {

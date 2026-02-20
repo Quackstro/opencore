@@ -67,7 +67,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Health check complete. Results shown above.",
+      "content": "✅ Health check complete. Results shown above\n\n{{result}}",
       "terminal": true
     },
     "error": {

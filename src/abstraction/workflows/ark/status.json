@@ -17,7 +17,7 @@
     },
     "done": {
       "type": "info",
-      "content": "📦 Backup status retrieved. See above for details.",
+      "content": "📦 Backup status retrieved. See above for details\n\n{{result}}",
       "terminal": true
     }
   }

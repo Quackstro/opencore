@@ -31,7 +31,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Thought captured!",
+      "content": "✅ Thought captured!\n\n{{result}}",
       "terminal": true
     },
     "error": {

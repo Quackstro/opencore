@@ -62,7 +62,7 @@
     },
     "done": {
       "type": "info",
-      "content": "✅ Statement imported successfully for {{data.enter-account.input}} ({{data.enter-period.input}}).",
+      "content": "✅ Statement imported successfully for {{data.enter-account.input}} ({{data.enter-period.input}})\n\n{{result}}",
       "terminal": true
     },
     "cancelled": {
