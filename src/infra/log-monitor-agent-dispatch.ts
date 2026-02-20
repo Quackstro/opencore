@@ -465,6 +465,9 @@ async function dispatchHealingAgentInternal(
       label: `healing:${issue.signature.slice(0, 40)}`,
       model: config.model,
       runTimeoutSeconds: timeoutSeconds,
+      requesterOrigin: deps.notifyTarget
+        ? { channel: "telegram", to: deps.notifyTarget, accountId: deps.notifyAccountId }
+        : undefined,
     });
 
     // Track in active agents
