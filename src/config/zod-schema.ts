@@ -324,6 +324,9 @@ export const OpenClawSchema = z
               })
               .strict()
               .optional(),
+            notifyChannel: z.string().optional(),
+            notifyTarget: z.string().optional(),
+            notifyAccountId: z.string().optional(),
           })
           .strict()
           .optional(),

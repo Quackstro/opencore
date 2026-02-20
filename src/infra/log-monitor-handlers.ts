@@ -224,16 +224,16 @@ const GenericErrorHandler: LogMonitorHandler = {
   },
 
   async resolve(issue, _ctx): Promise<HandlerResolution> {
-    if (issue.occurrences >= 5) {
+    if (issue.occurrences >= 2) {
       return {
         result: "needs-agent",
         agentContext: {
           task: `Diagnose and fix recurring error: ${issue.message}`,
-          severity: "medium",
+          severity: issue.occurrences >= 5 ? "high" : "medium",
         },
       };
     }
-    // Low occurrence — suppress
+    // Single occurrence — suppress
     return { result: "fixed" };
   },
 };

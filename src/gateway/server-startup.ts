@@ -159,9 +159,12 @@ export async function startGatewaySidecars(params: {
   if (params.cfg.logMonitor?.enabled) {
     try {
       const { startLogMonitor } = await import("../infra/log-monitor.js");
+      const ad = params.cfg.logMonitor.agentDispatch;
       const handle = startLogMonitor(params.cfg.logMonitor, {
         logger: params.log as { info: (msg: string) => void; warn: (msg: string) => void },
         sessionKey: "system:log-monitor",
+        notifyTarget: ad?.notifyTarget,
+        notifyAccountId: ad?.notifyAccountId,
       });
       params.log.warn(
         `log monitor started (agentDispatch=${!!params.cfg.logMonitor.agentDispatch?.enabled})`,

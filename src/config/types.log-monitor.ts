@@ -30,6 +30,12 @@ export type AgentDispatchConfig = {
   agentId?: string;
   /** Manual approval gate before dispatching healing agents. Default: { mode: "always" }. */
   approvalGate?: HealingApprovalGate;
+  /** Channel for approval/completion notifications (e.g. "telegram"). */
+  notifyChannel?: string;
+  /** Target chat/user ID for notifications. */
+  notifyTarget?: string;
+  /** Account ID for the notification channel. */
+  notifyAccountId?: string;
 };
 
 export type LogMonitorConfig = {
