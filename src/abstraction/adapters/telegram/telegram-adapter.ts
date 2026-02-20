@@ -129,7 +129,7 @@ const MESSAGE_EDIT_MAX_AGE_MS = 48 * 60 * 60 * 1000; // 48 hours
 // ─── Adapter ────────────────────────────────────────────────────────────────
 
 export class TelegramAdapter implements SurfaceAdapter {
-  readonly surfaceId = "telegram";
+  readonly surfaceId: string;
   readonly version = "1.0.0";
   readonly capabilities: SurfaceCapabilities = {
     inlineButtons: true,
@@ -150,8 +150,9 @@ export class TelegramAdapter implements SurfaceAdapter {
   /** Track message timestamps for edit-age checks */
   private messageTimestamps: Map<string, number> = new Map();
 
-  constructor(provider: TelegramProvider) {
+  constructor(provider: TelegramProvider, surfaceId = "telegram") {
     this.provider = provider;
+    this.surfaceId = surfaceId;
   }
 
   // ─── Render ─────────────────────────────────────────────────────────

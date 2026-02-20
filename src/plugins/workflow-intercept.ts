@@ -74,9 +74,10 @@ export function tryWorkflowIntercept(params: {
   }
 
   const chatId = ctx.chatId ?? ctx.senderId ?? "unknown";
+  const accountId = ctx.accountId;
 
   const surface: SurfaceTarget = {
-    surfaceId: "telegram",
+    surfaceId: accountId ? `telegram:${accountId}` : "telegram",
     surfaceUserId: chatId,
     channelId: chatId,
   };

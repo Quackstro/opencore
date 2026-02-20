@@ -380,7 +380,7 @@ export function createTelegramBot(opts: TelegramBotOptions) {
   // This lets the workflow engine render steps (buttons, messages) via bot.api.
   try {
     const provider = createTelegramProviderBridge(bot.api);
-    setTelegramProvider(provider);
+    setTelegramProvider(provider, opts.accountId);
   } catch (err) {
     (runtime?.error ?? console.error)(
       `[workflow] failed to bind Telegram provider: ${String(err)}`,

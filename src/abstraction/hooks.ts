@@ -41,9 +41,9 @@ const WF_MESSAGE_PRIORITY = 200;
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function buildSurface(chatId: string): SurfaceTarget {
+function buildSurface(chatId: string, accountId?: string): SurfaceTarget {
   return {
-    surfaceId: "telegram",
+    surfaceId: accountId ? `telegram:${accountId}` : "telegram",
     surfaceUserId: chatId,
     channelId: chatId,
   };
@@ -95,7 +95,7 @@ async function handleWorkflowCallback(
     return null;
   }
 
-  const surface = buildSurface(ctx.chatId);
+  const surface = buildSurface(ctx.chatId, ctx.accountId);
   const userId = ctx.chatId; // For now, userId = chatId. IdentityService can resolve later.
 
   let action: ParsedUserAction;
@@ -166,7 +166,7 @@ async function handleWorkflowMessage(
     return null;
   }
 
-  const surface = buildSurface(ctx.chatId);
+  const surface = buildSurface(ctx.chatId, ctx.accountId);
   const text = ctx.text.trim();
 
   // Check for meta-actions typed as text

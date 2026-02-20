@@ -150,6 +150,16 @@ export class WorkflowEngine {
     this.adapters.set(adapter.surfaceId, adapter);
   }
 
+  /**
+   * Resolve adapter for a surface, with fallback.
+   * e.g. "telegram:finance" → exact match, or fall back to "telegram"
+   */
+  private resolveAdapter(surfaceId: string): SurfaceAdapter | undefined {
+    return this.adapters.get(surfaceId) ?? (
+      surfaceId.includes(":") ? this.adapters.get(surfaceId.split(":")[0]) : undefined
+    );
+  }
+
   // ─── SDK Methods ──────────────────────────────────────────────────────
 
   registerWorkflow(definition: WorkflowDefinition): ValidationResult {
@@ -277,7 +287,7 @@ export class WorkflowEngine {
   }
 
   getSurfaceCapabilities(surface: SurfaceTarget) {
-    const adapter = this.adapters.get(surface.surfaceId);
+    const adapter = this.resolveAdapter(surface.surfaceId);
     return adapter?.capabilities;
   }
 
@@ -297,7 +307,7 @@ export class WorkflowEngine {
     // Meta-actions
     if (action.kind === "cancel") {
       this.stateManager.delete(state.userId, state.workflowId);
-      const adapter = this.adapters.get(surface.surfaceId);
+      const adapter = this.resolveAdapter(surface.surfaceId);
       if (adapter) {
         await adapter.sendMessage(surface, {
           text: "Cancelled. No changes were made.",
@@ -310,7 +320,7 @@ export class WorkflowEngine {
       if (state.stepHistory.length === 0) {
         // Back on first step = cancel
         this.stateManager.delete(state.userId, state.workflowId);
-        const adapter = this.adapters.get(surface.surfaceId);
+        const adapter = this.resolveAdapter(surface.surfaceId);
         if (adapter) {
           await adapter.sendMessage(surface, {
             text: "Cancelled. No changes were made.",
@@ -341,7 +351,7 @@ export class WorkflowEngine {
     if (step.type === "text-input" && action.kind === "text") {
       const vErr = this.validate(step, action.text ?? "");
       if (vErr) {
-        const adapter = this.adapters.get(surface.surfaceId);
+        const adapter = this.resolveAdapter(surface.surfaceId);
         if (adapter) {
           await adapter.sendMessage(surface, { text: vErr });
         }
@@ -365,7 +375,7 @@ export class WorkflowEngine {
       const result = await this.toolExecutor(step.toolCall.name, params);
       if (!result.success) {
         const errMsg = result.error ?? "Tool call failed. Please try again.";
-        const adapter = this.adapters.get(surface.surfaceId);
+        const adapter = this.resolveAdapter(surface.surfaceId);
         if (adapter) {
           await adapter.sendMessage(surface, { text: errMsg });
         }
@@ -413,7 +423,7 @@ export class WorkflowEngine {
         const infoResult = await this.toolExecutor(nextStep.toolCall.name, infoParams);
         if (!infoResult.success) {
           const errMsg = infoResult.error ?? "Tool call failed.";
-          const adapter = this.adapters.get(surface.surfaceId);
+          const adapter = this.resolveAdapter(surface.surfaceId);
           if (adapter) {
             await adapter.sendMessage(surface, { text: errMsg });
           }
@@ -458,7 +468,7 @@ export class WorkflowEngine {
     const step = def.steps[state.currentStep];
     if (!step) {return null;}
 
-    const adapter = this.adapters.get(surface.surfaceId);
+    const adapter = this.resolveAdapter(surface.surfaceId);
     if (!adapter) {return null;}
 
     const progress = computeProgress(def, state.currentStep, state.stepHistory);

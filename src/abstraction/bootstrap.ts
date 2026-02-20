@@ -30,6 +30,7 @@ let _stateManager: WorkflowStateManager | null = null;
 let _identityService: IdentityService | null = null;
 let _messageRouter: MessageRouter | null = null;
 let _telegramAdapter: TelegramAdapter | null = null;
+const _telegramAdapters: Map<string, TelegramAdapter> = new Map();
 
 export interface WorkflowEngineOptions {
   /** Data directory (e.g. ~/.openclaw) */
@@ -112,18 +113,31 @@ export function initWorkflowEngine(opts: WorkflowEngineOptions): WorkflowEngine 
  * Late-bind the Telegram provider. Called after the Telegram bot is created,
  * so the workflow engine can render steps via Telegram API.
  */
-export function setTelegramProvider(provider: TelegramProvider): void {
+export function setTelegramProvider(provider: TelegramProvider, accountId?: string): void {
   if (!_engine) {
     console.warn("[workflow-bootstrap] Engine not initialized, cannot set Telegram provider");
     return;
   }
-  if (_telegramAdapter) {
-    console.warn("[workflow-bootstrap] Telegram adapter already registered, skipping");
+
+  const surfaceId = accountId ? `telegram:${accountId}` : "telegram";
+
+  // Check if already registered
+  if (accountId && _telegramAdapters.has(surfaceId)) {
     return;
   }
-  _telegramAdapter = new TelegramAdapter(provider);
-  _engine.registerAdapter(_telegramAdapter);
-  console.log("[workflow-bootstrap] Telegram adapter registered (late-bind)");
+  if (!accountId && _telegramAdapter) {
+    return;
+  }
+
+  const adapter = new TelegramAdapter(provider, surfaceId);
+  _engine.registerAdapter(adapter);
+
+  if (accountId) {
+    _telegramAdapters.set(surfaceId, adapter);
+  } else {
+    _telegramAdapter = adapter;
+  }
+  console.log(`[workflow-bootstrap] Telegram adapter registered: ${surfaceId}`);
 }
 
 /** Get the workflow engine singleton. Returns null if not initialized. */
