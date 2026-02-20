@@ -160,7 +160,7 @@ export async function startGatewaySidecars(params: {
     try {
       const { startLogMonitor } = await import("../infra/log-monitor.js");
       const handle = startLogMonitor(params.cfg.logMonitor, {
-        logger: params.log as any,
+        logger: params.log as { info: (msg: string) => void; warn: (msg: string) => void },
         sessionKey: "system:log-monitor",
       });
       params.log.warn(
