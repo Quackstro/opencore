@@ -235,19 +235,26 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
       );
       // Edit the original approval message to show expired state (remove buttons)
       if (expired.telegramMessageId && expired.telegramChatId) {
-        const expiredText = `⏰ **Healing Approval Expired** — \`${id.slice(0, 8)}\`\n\n` +
+        const expiredText =
+          `⏰ **Healing Approval Expired** — \`${id.slice(0, 8)}\`\n\n` +
           `**Issue:** ${expired.issueMessage}\n` +
           `**Severity:** ${expired.severity}\n\n` +
           `_The approval window closed. If the error persists, a new request will be sent._`;
         import("../telegram/send.js")
           .then(({ editMessageTelegram }) => {
-            void editMessageTelegram(expired.telegramChatId!, expired.telegramMessageId!, expiredText, {
-              accountId: opts.deps.deliveryAccountId,
-            });
+            void editMessageTelegram(
+              expired.telegramChatId!,
+              expired.telegramMessageId!,
+              expiredText,
+              {
+                accountId: opts.deps.deliveryAccountId,
+              },
+            );
           })
           .catch(() => {});
       } else if (opts.deps.sessionKey) {
-        const expiryText = `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
+        const expiryText =
+          `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
           `**Issue:** ${expired.issueMessage}\n` +
           `The approval window closed. If the error persists, a new request will be sent.`;
         import("./system-events.js")
@@ -324,7 +331,9 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
 }
 
 function editApprovalMessage(pending: PendingApproval, statusLine: string): void {
-  if (!pending.telegramMessageId || !pending.telegramChatId) return;
+  if (!pending.telegramMessageId || !pending.telegramChatId) {
+    return;
+  }
   const severityEmoji =
     pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
   const shortId = pending.id.slice(0, 8);
@@ -345,8 +354,11 @@ function editApprovalMessage(pending: PendingApproval, statusLine: string): void
 }
 
 function fallbackToSystemEvent(text: string, pending: PendingApproval, deps: LogMonitorDeps): void {
-  if (!deps.sessionKey) return;
-  const fallbackText = text + `\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
+  if (!deps.sessionKey) {
+    return;
+  }
+  const fallbackText =
+    text + `\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
   import("./system-events.js")
     .then(({ enqueueSystemEvent }) => {
       enqueueSystemEvent(fallbackText, { sessionKey: deps.sessionKey! });
@@ -534,6 +546,9 @@ async function dispatchHealingAgentInternal(
       label: `healing:${issue.signature.slice(0, 40)}`,
       model: config.model,
       runTimeoutSeconds: timeoutSeconds,
+      requesterOrigin: deps.notifyTarget
+        ? { channel: "telegram", to: deps.notifyTarget, accountId: deps.notifyAccountId }
+        : undefined,
     });
 
     // Track in active agents

@@ -14,13 +14,13 @@ import { runCrashRecoveryCheck } from "./crash-recovery.js";
 import { emitDiagnosticEvent } from "./diagnostic-events.js";
 import { dispatchHealingAgent } from "./log-monitor-agent-dispatch.js";
 import { startDiagnosticCollector } from "./log-monitor-diagnostics.js";
-import { startSecurityAuditCollector } from "./log-monitor-security-audit.js";
 import { normalizeResolution, runHandlers, type HandlerContext } from "./log-monitor-handlers.js";
 import {
   createIssueRegistry,
   type IssueCategory,
   type IssueRegistry,
 } from "./log-monitor-registry.js";
+import { startSecurityAuditCollector } from "./log-monitor-security-audit.js";
 import { enqueueSystemEvent } from "./system-events.js";
 
 // ============================================================================
@@ -82,8 +82,10 @@ export function classifyLogLine(line: string): ClassifiedIssue | null {
     try {
       const parsed = JSON.parse(line) as Record<string, unknown>;
       if (parsed.level === "error" || parsed.level === 50) {
-        const msg = String(parsed.msg ?? parsed.message ?? parsed.err ?? "unknown error");
-        const errCode = String(parsed.code ?? parsed.errorCode ?? "");
+        const rawMsg = parsed.msg ?? parsed.message ?? parsed.err ?? "unknown error";
+        const msg = typeof rawMsg === "string" ? rawMsg : JSON.stringify(rawMsg);
+        const rawCode = parsed.code ?? parsed.errorCode ?? "";
+        const errCode = typeof rawCode === "string" ? rawCode : JSON.stringify(rawCode);
 
         // Network errors
         if (TRANSIENT_NETWORK_CODES.some((c) => errCode.includes(c) || msg.includes(c))) {
@@ -137,14 +139,15 @@ export function classifyLogLine(line: string): ClassifiedIssue | null {
   }
 
   // Match lane task errors (command queue failures — rate limits, auth errors, etc.)
-  const laneMatch = line.match(
-    /\[diagnostic\] lane task error: lane=(\S+).*?error="(.+)"/,
-  );
+  const laneMatch = line.match(/\[diagnostic\] lane task error: lane=(\S+).*?error="(.+)"/);
   if (laneMatch) {
     const lane = laneMatch[1];
     const errMsg = laneMatch[2].slice(0, 200);
-    const isNetwork = errMsg.includes("rate limit") || errMsg.includes("ECONNRESET") ||
-      errMsg.includes("ETIMEDOUT") || errMsg.includes("fetch failed");
+    const isNetwork =
+      errMsg.includes("rate limit") ||
+      errMsg.includes("ECONNRESET") ||
+      errMsg.includes("ETIMEDOUT") ||
+      errMsg.includes("fetch failed");
     return {
       signature: `lane:${lane.split(":").slice(0, 2).join(":")}:${errMsg.slice(0, 50)}`,
       category: isNetwork ? "network" : "error",
@@ -251,6 +254,10 @@ export interface LogMonitorDeps {
   /** Account ID for multi-account channels. */
   deliveryAccountId?: string;
   logger?: { info: (msg: string) => void; warn: (msg: string) => void };
+  /** Telegram chat ID to send approval notifications to. */
+  notifyTarget?: string;
+  /** Telegram account ID for sending notifications. */
+  notifyAccountId?: string;
 }
 
 export interface LogMonitorHandle {
@@ -294,8 +301,15 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   let currentConfig = merged;
 
   // Shared issue callback for all collectors
-  const handleCollectedIssue = (issue: { signature: string; category: IssueCategory; message: string }) => {
+  const handleCollectedIssue = (issue: {
+    signature: string;
+    category: IssueCategory;
+    message: string;
+  }) => {
     const decision = registry.record(issue);
+    deps.logger?.warn?.(
+      `log-monitor: registry decision for ${issue.signature}: surface=${decision.shouldSurface} autoResolve=${decision.shouldAutoResolve}`,
+    );
     if (decision.shouldSurface) {
       surfaceIssue(issue.signature, issue.message, deps);
     }
@@ -362,7 +376,11 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   const interval = setInterval(tick, currentConfig.intervalMs);
   interval.unref();
 
-  deps.logger?.info?.("log-monitor: started");
+  // Debug: log globalThis listener count to verify singleton works across chunks
+  const diagGlobal = (
+    globalThis as unknown as Record<string, { listeners?: { size?: number } } | undefined>
+  ).__openclaw_diagnostic_events__;
+  deps.logger?.warn?.(`log-monitor: started (listeners=${diagGlobal?.listeners?.size ?? "N/A"})`);
 
   return {
     stop() {
@@ -456,7 +474,7 @@ async function resolveIssue(
           return;
         }
         // If dispatch was blocked, fall through to user escalation
-        deps.logger?.info?.(
+        deps.logger?.warn?.(
           `log-monitor: agent dispatch blocked (${dispatchResult.reason}), escalating to user`,
         );
       }

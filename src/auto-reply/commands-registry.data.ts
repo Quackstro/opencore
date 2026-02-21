@@ -334,13 +334,13 @@ function buildChatCommands(): ChatCommandDefinition[] {
       args: [
         {
           name: "action",
-          description: "approve | reject | list | test",
+          description: "approve | reject | list | history | search | test",
           type: "string",
-          choices: ["approve", "reject", "list", "test"],
+          choices: ["list", "history", "approve", "reject", "search", "test"],
         },
         {
           name: "id",
-          description: "Approval request ID (or prefix)",
+          description: "ID, offset, or search query",
           type: "string",
         },
       ],
