@@ -157,8 +157,16 @@ export type DiagnosticEventInput = DiagnosticEventPayload extends infer Event
     ? Omit<Event, "seq" | "ts">
     : never
   : never;
-let seq = 0;
-const listeners = new Set<(evt: DiagnosticEventPayload) => void>();
+// Use process-global singleton so that diagnostic events work across
+// code-split chunks that may each get their own copy of this module.
+const GLOBAL_KEY = "__openclaw_diagnostic_events__";
+type DiagGlobal = { seq: number; listeners: Set<(evt: DiagnosticEventPayload) => void> };
+const g = globalThis as unknown as Record<string, DiagGlobal | undefined>;
+if (!g[GLOBAL_KEY]) {
+  g[GLOBAL_KEY] = { seq: 0, listeners: new Set() };
+}
+const _state = g[GLOBAL_KEY];
+const listeners = _state.listeners;
 
 export function isDiagnosticsEnabled(config?: OpenClawConfig): boolean {
   return config?.diagnostics?.enabled === true;
@@ -167,7 +175,7 @@ export function isDiagnosticsEnabled(config?: OpenClawConfig): boolean {
 export function emitDiagnosticEvent(event: DiagnosticEventInput) {
   const enriched = {
     ...event,
-    seq: (seq += 1),
+    seq: (_state.seq += 1),
     ts: Date.now(),
   } satisfies DiagnosticEventPayload;
   for (const listener of listeners) {
@@ -185,6 +193,6 @@ export function onDiagnosticEvent(listener: (evt: DiagnosticEventPayload) => voi
 }
 
 export function resetDiagnosticEventsForTest(): void {
-  seq = 0;
+  _state.seq = 0;
   listeners.clear();
 }

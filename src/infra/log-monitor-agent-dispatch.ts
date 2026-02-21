@@ -245,9 +245,6 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
 }
 
 function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps): void {
-  if (!deps.sessionKey) {
-    return;
-  }
   const severityEmoji =
     pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
   const text = [
@@ -257,19 +254,43 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
     `**Severity:** ${pending.severity}`,
     `**Proposed action:** ${pending.task}`,
     "",
-    `Approve: \`/heal approve ${pending.id}\``,
-    `Reject: \`/heal reject ${pending.id}\``,
-    "",
     `_Expires in ${Math.round((pending.expiresAt - pending.createdAt) / 1000)}s_`,
   ].join("\n");
 
-  import("./system-events.js")
-    .then(({ enqueueSystemEvent }) => {
-      enqueueSystemEvent(text, { sessionKey: deps.sessionKey! });
-    })
-    .catch(() => {
-      // Ignore import failure
-    });
+  const buttons = [
+    [
+      { text: "✅ Approve", callback_data: `/heal approve ${pending.id}` },
+      { text: "❌ Reject", callback_data: `/heal reject ${pending.id}` },
+    ],
+  ];
+
+  // Try Telegram direct send (supports inline buttons), then system event fallback.
+  void (async () => {
+    try {
+      const target = deps.notifyTarget;
+      if (target) {
+        const { sendMessageTelegram } = await import("../telegram/send.js");
+        await sendMessageTelegram(target, text, {
+          accountId: deps.notifyAccountId,
+          buttons,
+        });
+        return;
+      }
+    } catch {
+      // fall through to system event
+    }
+
+    // Fallback: system event (no button support)
+    if (deps.sessionKey) {
+      try {
+        const { enqueueSystemEvent } = await import("./system-events.js");
+        const fallbackText = `${text}\n\nApprove: \`/heal approve ${pending.id}\`\nReject: \`/heal reject ${pending.id}\``;
+        enqueueSystemEvent(fallbackText, { sessionKey: deps.sessionKey });
+      } catch {
+        // best-effort
+      }
+    }
+  })();
 }
 
 /**
@@ -444,6 +465,9 @@ async function dispatchHealingAgentInternal(
       label: `healing:${issue.signature.slice(0, 40)}`,
       model: config.model,
       runTimeoutSeconds: timeoutSeconds,
+      requesterOrigin: deps.notifyTarget
+        ? { channel: "telegram", to: deps.notifyTarget, accountId: deps.notifyAccountId }
+        : undefined,
     });
 
     // Track in active agents

@@ -216,6 +216,10 @@ export interface LogMonitorDeps {
   /** Session key for system events. If not provided, skips event delivery. */
   sessionKey?: string;
   logger?: { info: (msg: string) => void; warn: (msg: string) => void };
+  /** Telegram chat ID to send approval notifications to. */
+  notifyTarget?: string;
+  /** Telegram account ID for sending notifications. */
+  notifyAccountId?: string;
 }
 
 export interface LogMonitorHandle {
@@ -260,7 +264,13 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
 
   // Start diagnostic event collector to capture real-time events
   const stopDiagnostics = startDiagnosticCollector((issue) => {
+    deps.logger?.warn?.(
+      `log-monitor: collector received issue: ${issue.signature} (category=${issue.category})`,
+    );
     const decision = registry.record(issue);
+    deps.logger?.warn?.(
+      `log-monitor: registry decision for ${issue.signature}: surface=${decision.shouldSurface} autoResolve=${decision.shouldAutoResolve}`,
+    );
     if (decision.shouldSurface) {
       surfaceIssue(issue.signature, issue.message, deps);
     }
@@ -315,7 +325,9 @@ export function startLogMonitor(cfg: LogMonitorConfig, deps: LogMonitorDeps): Lo
   const interval = setInterval(tick, currentConfig.intervalMs);
   interval.unref();
 
-  deps.logger?.info?.("log-monitor: started");
+  // Debug: log globalThis listener count to verify singleton works across chunks
+  const diagGlobal = (globalThis as any).__openclaw_diagnostic_events__;
+  deps.logger?.warn?.(`log-monitor: started (listeners=${diagGlobal?.listeners?.size ?? "N/A"})`);
 
   return {
     stop() {
@@ -377,11 +389,12 @@ async function resolveIssue(
 ): Promise<void> {
   registry.markAutoResolveAttempt(issue.signature);
 
-  const result = await runHandlers({ ...issue, occurrences: 0 }, ctx);
+  const entry = registry.getIssue(issue.signature);
+  const result = await runHandlers({ ...issue, occurrences: entry?.occurrences ?? 0 }, ctx);
 
   if (result) {
     const resolution = normalizeResolution(result.resolution);
-    deps.logger?.info?.(
+    deps.logger?.warn?.(
       `log-monitor: handler ${result.handler} resolved ${issue.signature} → ${result.result}`,
     );
 
@@ -390,7 +403,7 @@ async function resolveIssue(
       if (config.enabled) {
         const recentLines = getRecentLogLines(deps, 50);
         const dispatchResult = await dispatchHealingAgent({
-          issue: { ...issue, occurrences: 0 },
+          issue: { ...issue, occurrences: entry?.occurrences ?? 0 },
           recentLogLines: recentLines,
           agentContext: resolution.agentContext,
           config,
@@ -401,7 +414,7 @@ async function resolveIssue(
           return;
         }
         // If dispatch was blocked, fall through to user escalation
-        deps.logger?.info?.(
+        deps.logger?.warn?.(
           `log-monitor: agent dispatch blocked (${dispatchResult.reason}), escalating to user`,
         );
       }
