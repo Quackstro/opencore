@@ -4,6 +4,8 @@
 
 > **Upstream:** [github.com/openclaw/openclaw](https://github.com/openclaw/openclaw) · [docs.openclaw.ai](https://docs.openclaw.ai) · [Discord](https://discord.gg/clawd)
 
+> 💛 **Like OpenCore?** Tips help keep development going: `D6i8TeepmrGztENxdME84d2x5UVjLWncat` (DOGE) — _Much fork. Very heal. Such secure. Wow._ 🐕
+
 ## What's Different
 
 OpenCore tracks upstream `openclaw/main` and layers the following on top:
@@ -44,6 +46,10 @@ Enhanced plugin system with callback handlers, message interceptors, URL buttons
 - **Workflow error handling** — Retry/cancel buttons on workflow failures, tool result display in success steps
 - **Per-account Telegram routing** — Multi-account adapter routing for abstraction layer
 - **Circular dependency patches** — Post-build `fix-circular-deps.py` for clean chunk splitting
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and priorities.
 
 ## Extensions
 
@@ -87,15 +93,3 @@ OpenCore-specific config additions are documented in each feature's doc:
 ## License
 
 MIT — [Quackstro LLC](https://quackstro.com)
-
----
-
-## Support the Project
-
-If you find OpenCore or its plugins useful, tips are always appreciated:
-
-**DOGE Address:** `D6i8TeepmrGztENxdME84d2x5UVjLWncat`
-
-Every DOGE goes toward hosting, continued development, and keeping the lights on. 🐕
-
-_Much fork. Very heal. Such secure. Wow._ 🐕
