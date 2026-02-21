@@ -7,8 +7,6 @@ export type HealingApprovalGate = {
    * - "off": no approval required, agents dispatch automatically
    */
   mode?: "always" | "high-only" | "medium-and-above" | "off";
-  /** Seconds to wait for user approval before expiring the request. Default: 300. */
-  timeoutSeconds?: number;
 };
 
 export type AgentDispatchConfig = {

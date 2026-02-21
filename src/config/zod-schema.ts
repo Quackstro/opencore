@@ -340,7 +340,6 @@ export const OpenClawSchema = z
             approvalGate: z
               .object({
                 mode: z.enum(["always", "high-only", "medium-and-above", "off"]).optional(),
-                timeoutSeconds: z.number().int().positive().optional(),
               })
               .strict()
               .optional(),
