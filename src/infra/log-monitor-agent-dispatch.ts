@@ -70,6 +70,10 @@ export interface PendingApproval {
 const pendingApprovals = new Map<string, PendingApproval>();
 const approvalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+// Expired approvals grace window (2 hours) — allows late approve/re-request
+const expiredApprovals = new Map<string, PendingApproval>();
+const EXPIRED_GRACE_MS = 2 * 60 * 60 * 1000;
+
 /** Circuit breaker: max consecutive failures before permanent escalation. */
 const CIRCUIT_BREAKER_MAX_FAILURES = 3;
 /** Circuit breaker window: 6 hours. */
@@ -209,8 +213,11 @@ export function requiresApproval(
 
 function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentDispatchResult {
   const id = crypto.randomUUID();
-  const timeoutSeconds = opts.config.approvalGate?.timeoutSeconds ?? 300;
+  const timeoutSeconds = opts.config.approvalGate?.timeoutSeconds ?? 1800;
   const task = opts.agentContext?.task ?? `Heal: ${opts.issue.message}`;
+
+  // Clear any expired approvals for the same signature (escalation on recurrence)
+  clearExpiredForSignature(opts.issue.signature);
 
   const pending: PendingApproval = {
     id,
@@ -230,16 +237,31 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
     if (expired) {
       pendingApprovals.delete(id);
       approvalTimers.delete(id);
+      // Move to expired grace window instead of deleting
+      expiredApprovals.set(id, expired);
+      // Clean up after grace period
+      const graceTimer = setTimeout(() => {
+        expiredApprovals.delete(id);
+      }, EXPIRED_GRACE_MS);
+      graceTimer.unref();
+
       opts.deps.logger?.info?.(
-        `log-monitor: approval request ${id} expired for ${opts.issue.signature}`,
+        `log-monitor: approval request ${id} expired for ${opts.issue.signature} (grace window: ${EXPIRED_GRACE_MS / 60000}m)`,
       );
-      // Edit the original approval message to show expired state (remove buttons)
+      const shortId = id.slice(0, 8);
+      // Edit the original approval message — add Re-request button
       if (expired.telegramMessageId && expired.telegramChatId) {
         const expiredText =
-          `⏰ **Healing Approval Expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `⏰ **Healing Approval Expired** — \`${shortId}\`\n\n` +
           `**Issue:** ${expired.issueMessage}\n` +
           `**Severity:** ${expired.severity}\n\n` +
-          `_The approval window closed. If the error persists, a new request will be sent._`;
+          `_You can still approve or re-request within the next 2 hours._`;
+        const buttons = [
+          [
+            { text: "✅ Approve Anyway", callback_data: `/heal approve ${shortId}` },
+            { text: "🔄 Re-request", callback_data: `/heal rerequest ${shortId}` },
+          ],
+        ];
         import("../telegram/send.js")
           .then(({ editMessageTelegram }) => {
             void editMessageTelegram(
@@ -248,15 +270,16 @@ function requestApproval(opts: AgentDispatchOptions, severity: Severity): AgentD
               expiredText,
               {
                 accountId: opts.deps.deliveryAccountId,
+                buttons,
               },
             );
           })
           .catch(() => {});
       } else if (opts.deps.sessionKey) {
         const expiryText =
-          `⏰ **Healing approval expired** — \`${id.slice(0, 8)}\`\n\n` +
+          `⏰ **Healing approval expired** — \`${shortId}\`\n\n` +
           `**Issue:** ${expired.issueMessage}\n` +
-          `The approval window closed. If the error persists, a new request will be sent.`;
+          `You can still: \`/heal approve ${shortId}\` or \`/heal rerequest ${shortId}\` (within 2h)`;
         import("./system-events.js")
           .then(({ enqueueSystemEvent }) => {
             enqueueSystemEvent(expiryText, { sessionKey: opts.deps.sessionKey! });
@@ -300,6 +323,7 @@ function surfaceApprovalRequest(pending: PendingApproval, deps: LogMonitorDeps):
     [
       { text: `✅ Approve`, callback_data: `/heal approve ${shortId}` },
       { text: `🚫 Reject`, callback_data: `/heal reject ${shortId}` },
+      { text: `🔄 Extend 30m`, callback_data: `/heal extend ${shortId}` },
     ],
   ];
 
@@ -377,21 +401,37 @@ export async function approveHealingDispatch(approvalId: string): Promise<{
   dispatched: boolean;
   reason?: string;
 }> {
-  const pending = pendingApprovals.get(approvalId);
+  // Check pending first, then expired grace window
+  let pending = pendingApprovals.get(approvalId);
+  let fromExpired = false;
+  if (!pending) {
+    const expired = expiredApprovals.get(approvalId);
+    if (expired) {
+      pending = expired;
+      fromExpired = true;
+    }
+  }
   if (!pending) {
     return { approved: false, dispatched: false, reason: "approval-not-found-or-expired" };
   }
 
-  // Clear pending state
-  pendingApprovals.delete(approvalId);
-  const timer = approvalTimers.get(approvalId);
-  if (timer) {
-    clearTimeout(timer);
-    approvalTimers.delete(approvalId);
+  // Clear from whichever map it was in
+  if (fromExpired) {
+    expiredApprovals.delete(approvalId);
+  } else {
+    pendingApprovals.delete(approvalId);
+    const timer = approvalTimers.get(approvalId);
+    if (timer) {
+      clearTimeout(timer);
+      approvalTimers.delete(approvalId);
+    }
   }
 
   // Edit approval message to show approved state
-  editApprovalMessage(pending, "✅ **Approved** — healing agent dispatched");
+  const label = fromExpired
+    ? "✅ **Late-Approved** — healing agent dispatched"
+    : "✅ **Approved** — healing agent dispatched";
+  editApprovalMessage(pending, label);
 
   // Dispatch with gate bypassed
   const result = await dispatchHealingAgentInternal(pending.opts);
@@ -402,16 +442,29 @@ export async function approveHealingDispatch(approvalId: string): Promise<{
  * Reject a pending healing agent dispatch.
  */
 export function rejectHealingDispatch(approvalId: string): { rejected: boolean; reason?: string } {
-  const pending = pendingApprovals.get(approvalId);
+  // Check pending first, then expired grace window
+  let pending = pendingApprovals.get(approvalId);
+  let fromExpired = false;
+  if (!pending) {
+    const expired = expiredApprovals.get(approvalId);
+    if (expired) {
+      pending = expired;
+      fromExpired = true;
+    }
+  }
   if (!pending) {
     return { rejected: false, reason: "approval-not-found-or-expired" };
   }
 
-  pendingApprovals.delete(approvalId);
-  const timer = approvalTimers.get(approvalId);
-  if (timer) {
-    clearTimeout(timer);
-    approvalTimers.delete(approvalId);
+  if (fromExpired) {
+    expiredApprovals.delete(approvalId);
+  } else {
+    pendingApprovals.delete(approvalId);
+    const timer = approvalTimers.get(approvalId);
+    if (timer) {
+      clearTimeout(timer);
+      approvalTimers.delete(approvalId);
+    }
   }
 
   // Edit approval message to show rejected state
@@ -426,6 +479,153 @@ export function rejectHealingDispatch(approvalId: string): { rejected: boolean; 
 /**
  * List all pending approval requests.
  */
+/**
+ * Extend an active approval's TTL by 30 minutes.
+ */
+export function extendApproval(approvalId: string): {
+  extended: boolean;
+  newExpiresAt?: number;
+  reason?: string;
+} {
+  const pending = pendingApprovals.get(approvalId);
+  if (!pending) {
+    return { extended: false, reason: "approval-not-found-or-expired" };
+  }
+
+  const extensionMs = 1800 * 1000; // 30 minutes
+  pending.expiresAt += extensionMs;
+
+  // Reset the timer
+  const oldTimer = approvalTimers.get(approvalId);
+  if (oldTimer) {
+    clearTimeout(oldTimer);
+  }
+
+  const remainingMs = pending.expiresAt - Date.now();
+  const newTimer = setTimeout(() => {
+    // Re-use the same expiry logic by emitting the timeout
+    const expired = pendingApprovals.get(approvalId);
+    if (expired) {
+      pendingApprovals.delete(approvalId);
+      approvalTimers.delete(approvalId);
+      expiredApprovals.set(approvalId, expired);
+      const graceTimer = setTimeout(() => expiredApprovals.delete(approvalId), EXPIRED_GRACE_MS);
+      graceTimer.unref();
+      pending.opts.deps.logger?.info?.(
+        `log-monitor: approval ${approvalId} expired (after extension) for ${pending.issueSignature}`,
+      );
+    }
+  }, remainingMs);
+  newTimer.unref();
+  approvalTimers.set(approvalId, newTimer);
+
+  // Edit the Telegram message to reflect new expiry
+  if (pending.telegramMessageId && pending.telegramChatId) {
+    const shortId = approvalId.slice(0, 8);
+    const expiresIn = Math.round(remainingMs / 60000);
+    const severityEmoji =
+      pending.severity === "high" ? "🔴" : pending.severity === "medium" ? "🟡" : "🟢";
+    const updatedText = [
+      `${severityEmoji} **Healing Agent Approval Required** _(extended)_`,
+      "",
+      `🆔 \`${shortId}\``,
+      `**Issue:** ${pending.issueMessage}`,
+      `**Severity:** ${pending.severity}`,
+      `**Proposed action:** ${pending.task}`,
+      "",
+      `_Expires in ~${expiresIn}m_`,
+    ].join("\n");
+    const buttons = [
+      [
+        { text: "✅ Approve", callback_data: `/heal approve ${shortId}` },
+        { text: "🚫 Reject", callback_data: `/heal reject ${shortId}` },
+        { text: "🔄 Extend 30m", callback_data: `/heal extend ${shortId}` },
+      ],
+    ];
+    import("../telegram/send.js")
+      .then(({ editMessageTelegram }) => {
+        void editMessageTelegram(pending.telegramChatId!, pending.telegramMessageId!, updatedText, {
+          accountId: pending.opts.deps.deliveryAccountId,
+          buttons,
+        });
+      })
+      .catch(() => {});
+  }
+
+  return { extended: true, newExpiresAt: pending.expiresAt };
+}
+
+/**
+ * Re-request an expired approval — move it back to pending with a fresh TTL.
+ */
+export function rerequestApproval(approvalId: string): {
+  rerequested: boolean;
+  newId?: string;
+  reason?: string;
+} {
+  const expired = expiredApprovals.get(approvalId);
+  if (!expired) {
+    return { rerequested: false, reason: "expired-approval-not-found" };
+  }
+
+  expiredApprovals.delete(approvalId);
+
+  // Create fresh approval with new TTL
+  const newId = crypto.randomUUID();
+  const timeoutSeconds = expired.opts.config.approvalGate?.timeoutSeconds ?? 1800;
+  const refreshed: PendingApproval = {
+    ...expired,
+    id: newId,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + timeoutSeconds * 1000,
+    telegramMessageId: undefined,
+    telegramChatId: undefined,
+  };
+  pendingApprovals.set(newId, refreshed);
+
+  // Set expiry timer (simplified — will move to expired on timeout)
+  const timer = setTimeout(() => {
+    const exp = pendingApprovals.get(newId);
+    if (exp) {
+      pendingApprovals.delete(newId);
+      approvalTimers.delete(newId);
+      expiredApprovals.set(newId, exp);
+      const graceTimer = setTimeout(() => expiredApprovals.delete(newId), EXPIRED_GRACE_MS);
+      graceTimer.unref();
+    }
+  }, timeoutSeconds * 1000);
+  timer.unref();
+  approvalTimers.set(newId, timer);
+
+  // Surface a new approval message
+  surfaceApprovalRequest(refreshed, expired.opts.deps);
+
+  return { rerequested: true, newId };
+}
+
+/**
+ * Check if a signature has an expired approval (for escalation on recurrence).
+ */
+export function hasExpiredApprovalForSignature(signature: string): boolean {
+  for (const expired of expiredApprovals.values()) {
+    if (expired.issueSignature === signature) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Clear expired approval for a signature (when a new approval is created).
+ */
+export function clearExpiredForSignature(signature: string): void {
+  for (const [id, expired] of expiredApprovals) {
+    if (expired.issueSignature === signature) {
+      expiredApprovals.delete(id);
+    }
+  }
+}
+
 export function listPendingApprovals(): PendingApproval[] {
   const now = Date.now();
   // Clean expired while listing

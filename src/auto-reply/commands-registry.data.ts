@@ -336,7 +336,16 @@ function buildChatCommands(): ChatCommandDefinition[] {
           name: "action",
           description: "approve | reject | list | history | search | test",
           type: "string",
-          choices: ["list", "history", "approve", "reject", "search", "test"],
+          choices: [
+            "list",
+            "history",
+            "approve",
+            "reject",
+            "extend",
+            "rerequest",
+            "search",
+            "test",
+          ],
         },
         {
           name: "id",

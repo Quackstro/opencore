@@ -9,6 +9,8 @@ type ParsedHealCommand =
   | { ok: true; action: "list" }
   | { ok: true; action: "history"; offset: number }
   | { ok: true; action: "search"; query: string }
+  | { ok: true; action: "extend"; id: string }
+  | { ok: true; action: "rerequest"; id: string }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -34,6 +36,8 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
         "• `/heal search <query>` — search reports by keyword\n" +
         "• `/heal approve <id>` — approve a healing agent dispatch\n" +
         "• `/heal reject <id>` — reject a pending request\n" +
+        "• `/heal extend <id>` — extend approval window by 30 minutes\n" +
+        "• `/heal rerequest <id>` — re-request an expired approval\n" +
         "• `/heal test [low|medium|high]` — inject a simulated error for E2E testing\n" +
         "• `/heal report <id>` — view full healing report\n" +
         "• `/heal dismiss <id>` — acknowledge and close a report\n" +
@@ -59,6 +63,20 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
       return { ok: false, error: "Usage: /heal search <query>" };
     }
     return { ok: true, action: "search", query };
+  }
+
+  if (action === "extend") {
+    if (!tokens[1]) {
+      return { ok: false, error: "Usage: /heal extend <id>" };
+    }
+    return { ok: true, action: "extend", id: tokens[1] };
+  }
+
+  if (action === "rerequest" || action === "re-request" || action === "retry") {
+    if (!tokens[1]) {
+      return { ok: false, error: "Usage: /heal rerequest <id>" };
+    }
+    return { ok: true, action: "rerequest", id: tokens[1] };
   }
 
   if (action === "test" || action === "simulate") {
@@ -149,6 +167,8 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       rejectHealingDispatch,
       listPendingApprovals,
       dispatchHealingAgent,
+      extendApproval,
+      rerequestApproval,
     } = await import("../../infra/log-monitor-agent-dispatch.js");
 
     if (parsed.action === "report") {
@@ -210,6 +230,50 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 
     if (parsed.action === "search") {
       return await handleHealSearch(parsed.query);
+    }
+
+    if (parsed.action === "extend") {
+      const pending = listPendingApprovals();
+      const match = resolveApprovalId(parsed.id, pending);
+      if (!match) {
+        return {
+          shouldContinue: false,
+          reply: { text: `❌ No pending approval matching \`${parsed.id}\`.` },
+        };
+      }
+      const result = extendApproval(match.id);
+      if (!result.extended) {
+        return {
+          shouldContinue: false,
+          reply: { text: `❌ Extend failed: ${result.reason}` },
+        };
+      }
+      const expiresIn = Math.round((result.newExpiresAt! - Date.now()) / 60000);
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🔄 Extended approval \`${match.id.slice(0, 8)}\` — expires in ~${expiresIn}m`,
+        },
+      };
+    }
+
+    if (parsed.action === "rerequest") {
+      const result = rerequestApproval(parsed.id);
+      if (!result.rerequested) {
+        // Try prefix match against pending (user might be confused)
+        return {
+          shouldContinue: false,
+          reply: {
+            text: `❌ No expired approval matching \`${parsed.id}\`. Only expired approvals (within 2h grace window) can be re-requested.`,
+          },
+        };
+      }
+      return {
+        shouldContinue: false,
+        reply: {
+          text: `🔄 Re-requested approval — new ID: \`${result.newId?.slice(0, 8)}\`. Check for the new approval message.`,
+        },
+      };
     }
 
     if (parsed.action === "approve") {
