@@ -67,14 +67,19 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
 
   if (action === "extend") {
     if (!tokens[1]) {
-      return { ok: false, error: "Usage: /heal extend <id>" };
+      return { ok: true, action: "extend", id: "" };
     }
     return { ok: true, action: "extend", id: tokens[1] };
   }
 
-  if (action === "rerequest" || action === "re-request" || action === "retry") {
+  if (
+    action === "rerequest" ||
+    action === "re-request" ||
+    action === "retry" ||
+    action === "request"
+  ) {
     if (!tokens[1]) {
-      return { ok: false, error: "Usage: /heal rerequest <id>" };
+      return { ok: true, action: "rerequest", id: "" };
     }
     return { ok: true, action: "rerequest", id: tokens[1] };
   }
@@ -234,6 +239,28 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
 
     if (parsed.action === "extend") {
       const pending = listPendingApprovals();
+      if (!parsed.id) {
+        if (pending.length === 0) {
+          return { shouldContinue: false, reply: { text: "No pending approvals to extend." } };
+        }
+        const lines = pending.map((p) => {
+          const expiresIn = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
+          return `• \`${p.id.slice(0, 8)}\` — ${p.issueMessage} (expires in ~${expiresIn}m)`;
+        });
+        const buttons = pending.map((p) => [
+          {
+            text: `🔄 Extend ${p.id.slice(0, 8)}`,
+            callback_data: `/heal extend ${p.id.slice(0, 8)}`,
+          },
+        ]);
+        return {
+          shouldContinue: false,
+          reply: {
+            text: `**Pending approvals:**\n${lines.join("\n")}\n\nTap to extend:`,
+            channelData: { telegram: { buttons } },
+          },
+        };
+      }
       const match = resolveApprovalId(parsed.id, pending);
       if (!match) {
         return {
@@ -258,9 +285,16 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
     }
 
     if (parsed.action === "rerequest") {
+      if (!parsed.id) {
+        return {
+          shouldContinue: false,
+          reply: {
+            text: "ℹ️ Re-request revives an expired approval.\n\nUsage: `/heal rerequest <id>`\n\nExpired approvals show a 🔄 Re-request button — tap it from the expired notification.",
+          },
+        };
+      }
       const result = rerequestApproval(parsed.id);
       if (!result.rerequested) {
-        // Try prefix match against pending (user might be confused)
         return {
           shouldContinue: false,
           reply: {

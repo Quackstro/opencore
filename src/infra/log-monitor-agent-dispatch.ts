@@ -563,12 +563,23 @@ export function rerequestApproval(approvalId: string): {
   newId?: string;
   reason?: string;
 } {
-  const expired = expiredApprovals.get(approvalId);
+  // Try exact match first, then prefix match
+  let expired = expiredApprovals.get(approvalId);
+  let resolvedId = approvalId;
+  if (!expired) {
+    for (const [id, entry] of expiredApprovals) {
+      if (id.startsWith(approvalId)) {
+        expired = entry;
+        resolvedId = id;
+        break;
+      }
+    }
+  }
   if (!expired) {
     return { rerequested: false, reason: "expired-approval-not-found" };
   }
 
-  expiredApprovals.delete(approvalId);
+  expiredApprovals.delete(resolvedId);
 
   // Create fresh approval with new TTL
   const newId = crypto.randomUUID();
