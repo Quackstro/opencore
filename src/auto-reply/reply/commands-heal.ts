@@ -7,6 +7,8 @@ type ParsedHealCommand =
   | { ok: true; action: "approve"; id: string }
   | { ok: true; action: "reject"; id: string }
   | { ok: true; action: "list" }
+  | { ok: true; action: "history"; offset: number }
+  | { ok: true; action: "search"; query: string }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -28,6 +30,8 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
         "and dispatches AI healing agents for unresolved issues.\n\n" +
         "**Commands:**\n" +
         "• `/heal list` — show pending approval requests\n" +
+        "• `/heal history [offset]` — browse all healing reports\n" +
+        "• `/heal search <query>` — search reports by keyword\n" +
         "• `/heal approve <id>` — approve a healing agent dispatch\n" +
         "• `/heal reject <id>` — reject a pending request\n" +
         "• `/heal test [low|medium|high]` — inject a simulated error for E2E testing\n" +
@@ -42,6 +46,19 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
 
   if (action === "list" || action === "ls" || action === "pending") {
     return { ok: true, action: "list" };
+  }
+
+  if (action === "history" || action === "hist") {
+    const offset = tokens[1] ? parseInt(tokens[1], 10) : 0;
+    return { ok: true, action: "history", offset: Number.isNaN(offset) ? 0 : offset };
+  }
+
+  if (action === "search" || action === "find" || action === "grep") {
+    const query = tokens.slice(1).join(" ");
+    if (!query) {
+      return { ok: false, error: "Usage: /heal search <query>" };
+    }
+    return { ok: true, action: "search", query };
   }
 
   if (action === "test" || action === "simulate") {
@@ -187,6 +204,14 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       };
     }
 
+    if (parsed.action === "history") {
+      return await handleHealHistory(parsed.offset);
+    }
+
+    if (parsed.action === "search") {
+      return await handleHealSearch(parsed.query);
+    }
+
     if (parsed.action === "approve") {
       // Support short ID prefix matching
       const pending = listPendingApprovals();
@@ -259,7 +284,9 @@ async function handleHealApply(
   if (!report) {
     const unacked = getUnacknowledgedReports();
     const match = unacked.find((r) => r.id.startsWith(id));
-    if (match) report = match;
+    if (match) {
+      report = match;
+    }
   }
   if (!report) {
     return { shouldContinue: false, reply: { text: `❌ Report \`${id}\` not found.` } };
@@ -268,7 +295,8 @@ async function handleHealApply(
     return {
       shouldContinue: false,
       reply: {
-        text: `❌ Report \`${report.id}\` has no fix to apply.\n\n` +
+        text:
+          `❌ Report \`${report.id}\` has no fix to apply.\n\n` +
           `The healing agent diagnosed the issue but didn't propose a concrete fix. ` +
           `You can ask me to help fix it based on the report:\n\`/heal report ${report.id}\``,
       },
@@ -327,7 +355,8 @@ async function handleHealApply(
       return {
         shouldContinue: false,
         reply: {
-          text: `🔧 **Applying fix** from report \`${report.id}\`\n\n` +
+          text:
+            `🔧 **Applying fix** from report \`${report.id}\`\n\n` +
             `**Fix:** ${report.fixDescription ?? "Applying fix from report..."}\n\n` +
             `A healing agent has been dispatched. You'll be notified when it completes.`,
         },
@@ -525,6 +554,90 @@ async function handleHealTest(
     reply: {
       text: `🧪 **Heal Test — Dispatch Blocked**\n\nReason: ${result.reason}\n\nThis may indicate rate limiting, circuit breaker, or config issues.`,
     },
+  };
+}
+
+const HISTORY_PAGE_SIZE = 5;
+
+/**
+ * Show paginated history of all healing reports.
+ */
+async function handleHealHistory(offset: number): Promise<CommandHandlerResult> {
+  const { getAllReports } = await import("../../infra/healing-reports.js");
+  const all = getAllReports();
+  if (all.length === 0) {
+    return { shouldContinue: false, reply: { text: "📜 No healing reports yet." } };
+  }
+  const page = all.slice(offset, offset + HISTORY_PAGE_SIZE);
+  if (page.length === 0) {
+    return {
+      shouldContinue: false,
+      reply: { text: `📜 No more reports (total: ${all.length}).` },
+    };
+  }
+  const lines = page.map((r) => {
+    const emoji = r.success ? "✅" : "❌";
+    const acked = r.acknowledged ? "📌" : "🆕";
+    const date = new Date(r.completedAt).toISOString().slice(0, 16).replace("T", " ");
+    return `${emoji}${acked} \`${r.id.slice(0, 8)}\` ${date} — ${r.issueSignature}`;
+  });
+  const header = `📜 **Healing History** (${offset + 1}–${offset + page.length} of ${all.length})`;
+  const buttons: Array<Array<{ text: string; callback_data: string }>> = [];
+  const navRow: Array<{ text: string; callback_data: string }> = [];
+  if (offset > 0) {
+    navRow.push({
+      text: "⬅️ Previous",
+      callback_data: `/heal history ${Math.max(0, offset - HISTORY_PAGE_SIZE)}`,
+    });
+  }
+  if (offset + HISTORY_PAGE_SIZE < all.length) {
+    navRow.push({ text: "➡️ Next", callback_data: `/heal history ${offset + HISTORY_PAGE_SIZE}` });
+  }
+  if (navRow.length > 0) {
+    buttons.push(navRow);
+  }
+
+  return {
+    shouldContinue: false,
+    reply: {
+      text: `${header}\n\n${lines.join("\n")}`,
+      channelData: buttons.length > 0 ? { telegram: { buttons } } : undefined,
+    },
+  };
+}
+
+/**
+ * Search healing reports by query string (matches issue signature or full report text).
+ */
+async function handleHealSearch(query: string): Promise<CommandHandlerResult> {
+  const { getAllReports } = await import("../../infra/healing-reports.js");
+  const all = getAllReports();
+  const lower = query.toLowerCase();
+  const matches = all.filter(
+    (r) =>
+      r.issueSignature.toLowerCase().includes(lower) ||
+      r.fullReport.toLowerCase().includes(lower) ||
+      r.id.startsWith(query),
+  );
+  if (matches.length === 0) {
+    return {
+      shouldContinue: false,
+      reply: { text: `🔍 No reports matching "${query}".` },
+    };
+  }
+  const capped = matches.slice(0, 10);
+  const lines = capped.map((r) => {
+    const emoji = r.success ? "✅" : "❌";
+    const date = new Date(r.completedAt).toISOString().slice(0, 16).replace("T", " ");
+    return `${emoji} \`${r.id.slice(0, 8)}\` ${date} — ${r.issueSignature}`;
+  });
+  const header =
+    matches.length > 10
+      ? `🔍 **Search: "${query}"** (showing 10 of ${matches.length})`
+      : `🔍 **Search: "${query}"** (${matches.length} result${matches.length === 1 ? "" : "s"})`;
+  return {
+    shouldContinue: false,
+    reply: { text: `${header}\n\n${lines.join("\n")}` },
   };
 }
 
