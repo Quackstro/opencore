@@ -9,8 +9,7 @@ type ParsedHealCommand =
   | { ok: true; action: "list" }
   | { ok: true; action: "history"; offset: number }
   | { ok: true; action: "search"; query: string }
-  | { ok: true; action: "extend"; id: string }
-  | { ok: true; action: "rerequest"; id: string }
+  | { ok: true; action: "clear" }
   | { ok: true; action: "test"; severity?: "low" | "medium" | "high" }
   | { ok: true; action: "report"; id: string }
   | { ok: true; action: "dismiss"; id: string }
@@ -36,8 +35,7 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
         "• `/heal search <query>` — search reports by keyword\n" +
         "• `/heal approve <id>` — approve a healing agent dispatch\n" +
         "• `/heal reject <id>` — reject a pending request\n" +
-        "• `/heal extend <id>` — extend approval window by 30 minutes\n" +
-        "• `/heal rerequest <id>` — re-request an expired approval\n" +
+        "• `/heal clear` — dismiss all pending approvals\n" +
         "• `/heal test [low|medium|high]` — inject a simulated error for E2E testing\n" +
         "• `/heal report <id>` — view full healing report\n" +
         "• `/heal dismiss <id>` — acknowledge and close a report\n" +
@@ -65,23 +63,8 @@ function parseHealCommand(raw: string): ParsedHealCommand | null {
     return { ok: true, action: "search", query };
   }
 
-  if (action === "extend") {
-    if (!tokens[1]) {
-      return { ok: true, action: "extend", id: "" };
-    }
-    return { ok: true, action: "extend", id: tokens[1] };
-  }
-
-  if (
-    action === "rerequest" ||
-    action === "re-request" ||
-    action === "retry" ||
-    action === "request"
-  ) {
-    if (!tokens[1]) {
-      return { ok: true, action: "rerequest", id: "" };
-    }
-    return { ok: true, action: "rerequest", id: tokens[1] };
+  if (action === "clear" || action === "clearall" || action === "clear-all") {
+    return { ok: true, action: "clear" };
   }
 
   if (action === "test" || action === "simulate") {
@@ -172,8 +155,7 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       rejectHealingDispatch,
       listPendingApprovals,
       dispatchHealingAgent,
-      extendApproval,
-      rerequestApproval,
+      clearAllPendingApprovals,
     } = await import("../../infra/log-monitor-agent-dispatch.js");
 
     if (parsed.action === "report") {
@@ -207,8 +189,8 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       }
       const lines = pending.map((p) => {
         const severityEmoji = p.severity === "high" ? "🔴" : p.severity === "medium" ? "🟡" : "🟢";
-        const expiresIn = Math.max(0, Math.round((p.expiresAt - Date.now()) / 1000));
-        return `${severityEmoji} \`${p.id.slice(0, 8)}\` — ${p.issueMessage} (${p.severity}, expires in ${expiresIn}s)`;
+        const age = Math.round((Date.now() - p.createdAt) / 60000);
+        return `${severityEmoji} \`${p.id.slice(0, 8)}\` — ${p.issueMessage} (${p.severity}, ${age}m ago)`;
       });
       // Build approve/reject buttons for each pending approval
       const buttons = pending.flatMap((p) => {
@@ -237,75 +219,15 @@ export const handleHealCommand: CommandHandler = async (params, allowTextCommand
       return await handleHealSearch(parsed.query);
     }
 
-    if (parsed.action === "extend") {
-      const pending = listPendingApprovals();
-      if (!parsed.id) {
-        if (pending.length === 0) {
-          return { shouldContinue: false, reply: { text: "No pending approvals to extend." } };
-        }
-        const lines = pending.map((p) => {
-          const expiresIn = Math.max(0, Math.round((p.expiresAt - Date.now()) / 60000));
-          return `• \`${p.id.slice(0, 8)}\` — ${p.issueMessage} (expires in ~${expiresIn}m)`;
-        });
-        const buttons = pending.map((p) => [
-          {
-            text: `🔄 Extend ${p.id.slice(0, 8)}`,
-            callback_data: `/heal extend ${p.id.slice(0, 8)}`,
-          },
-        ]);
-        return {
-          shouldContinue: false,
-          reply: {
-            text: `**Pending approvals:**\n${lines.join("\n")}\n\nTap to extend:`,
-            channelData: { telegram: { buttons } },
-          },
-        };
-      }
-      const match = resolveApprovalId(parsed.id, pending);
-      if (!match) {
-        return {
-          shouldContinue: false,
-          reply: { text: `❌ No pending approval matching \`${parsed.id}\`.` },
-        };
-      }
-      const result = extendApproval(match.id);
-      if (!result.extended) {
-        return {
-          shouldContinue: false,
-          reply: { text: `❌ Extend failed: ${result.reason}` },
-        };
-      }
-      const expiresIn = Math.round((result.newExpiresAt! - Date.now()) / 60000);
+    if (parsed.action === "clear") {
+      const count = clearAllPendingApprovals();
       return {
         shouldContinue: false,
         reply: {
-          text: `🔄 Extended approval \`${match.id.slice(0, 8)}\` — expires in ~${expiresIn}m`,
-        },
-      };
-    }
-
-    if (parsed.action === "rerequest") {
-      if (!parsed.id) {
-        return {
-          shouldContinue: false,
-          reply: {
-            text: "ℹ️ Re-request revives an expired approval.\n\nUsage: `/heal rerequest <id>`\n\nExpired approvals show a 🔄 Re-request button — tap it from the expired notification.",
-          },
-        };
-      }
-      const result = rerequestApproval(parsed.id);
-      if (!result.rerequested) {
-        return {
-          shouldContinue: false,
-          reply: {
-            text: `❌ No expired approval matching \`${parsed.id}\`. Only expired approvals (within 2h grace window) can be re-requested.`,
-          },
-        };
-      }
-      return {
-        shouldContinue: false,
-        reply: {
-          text: `🔄 Re-requested approval — new ID: \`${result.newId?.slice(0, 8)}\`. Check for the new approval message.`,
+          text:
+            count > 0
+              ? `🗑 Cleared ${count} pending approval${count === 1 ? "" : "s"}.`
+              : "No pending approvals to clear.",
         },
       };
     }
