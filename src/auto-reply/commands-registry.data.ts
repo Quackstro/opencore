@@ -351,6 +351,26 @@ function buildChatCommands(): ChatCommandDefinition[] {
       },
     }),
     defineChatCommand({
+      key: "healthcheck",
+      nativeName: "healthcheck",
+      description: "Host security audit — scan config, permissions, and exposure.",
+      textAlias: "/healthcheck",
+      category: "management",
+      args: [
+        {
+          name: "action",
+          description: "deep | fix",
+          type: "string",
+          choices: ["deep", "fix"],
+        },
+      ],
+      argsMenu: {
+        arg: "action",
+        title:
+          "🛡️ **Host Security Healthcheck**\nScans OpenClaw config, file permissions, and network exposure.\n\nChoose a mode:",
+      },
+    }),
+    defineChatCommand({
       key: "config",
       nativeName: "config",
       description: "Show or set config values.",
