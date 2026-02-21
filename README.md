@@ -28,6 +28,15 @@ Run OpenClaw's security audit directly from chat. Scans config, file permissions
 - Auto-fix for file permissions and secure defaults
 - Deep scan with live gateway probe
 
+### 🎛️ [UI Abstraction Layer](docs/features/ui-abstraction.md)
+
+Channel-agnostic workflow engine. Define multi-step interactive UIs once in JSON, render them on any surface. 6 interaction primitives (choice, confirm, text-input, info, media, multi-choice), JSON-driven state machine, pluggable surface adapters.
+
+- 30+ workflows across Wallet, Brain, Ark, Ledger, Heal, Identity, OpenCore
+- Surface adapters: Telegram, Slack, text fallback
+- Capability negotiation with automatic degradation
+- Tool call execution with `{{data.stepId.field}}` templating
+
 ### 🔘 [Inline Button Directives](docs/features/inline-buttons.md)
 
 Agents can attach interactive buttons to replies with `[[buttons: Label:/callback]]` syntax. Auto-stacks on mobile. Works on Telegram and Discord.
