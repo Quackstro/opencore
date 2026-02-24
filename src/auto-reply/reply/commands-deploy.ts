@@ -200,14 +200,19 @@ export const handleDeployCommand: CommandHandler = async (params, allowTextComma
         message: "✅ **Deploy complete.** Gateway restarted successfully.",
       });
 
-      await execAsync("kill $(pgrep -f openclaw-gateway) 2>/dev/null || true");
-      await new Promise((resolve) => setTimeout(resolve, 3000));
-      execAsync("openclaw gateway start").catch(() => {});
+      // Defer the kill so the reply has time to flush to the channel.
+      // The handler returns the reply first; the process dies ~2s later.
+      setTimeout(() => {
+        execAsync("kill $(pgrep -f openclaw-gateway) 2>/dev/null || true")
+          .then(() => new Promise((resolve) => setTimeout(resolve, 3000)))
+          .then(() => execAsync("openclaw gateway start").catch(() => {}))
+          .catch(() => {});
+      }, 2000);
 
       return {
         shouldContinue: false,
         reply: {
-          text: "🚀 **Deploying...** Gateway stopped and restarting with latest build. Back in a few seconds.",
+          text: "🚀 **Deploying...** Gateway restarting with latest build. Back in a few seconds.",
         },
       };
     } catch (err) {
