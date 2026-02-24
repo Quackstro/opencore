@@ -187,6 +187,17 @@ async function completeSubagentRun(params: {
   if (suppressedForSteerRestart) {
     return;
   }
+
+  // Check if this is a healing agent session — if so, let the healing dispatch
+  // handle its own notification and skip the normal announce flow.
+  const healingHandled = await notifyHealingAgentIfApplicable(params.runId, entry);
+  if (healingHandled) {
+    if (beginSubagentCleanup(params.runId)) {
+      void finalizeSubagentCleanup(params.runId, entry.cleanup, true);
+    }
+    return;
+  }
+
   startSubagentAnnounceCleanupFlow(params.runId, entry);
 }
 
@@ -937,4 +948,24 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
 
 export function initSubagentRegistry() {
   restoreSubagentRunsOnce();
+}
+
+async function notifyHealingAgentIfApplicable(
+  runId: string,
+  entry: SubagentRunRecord,
+): Promise<boolean> {
+  try {
+    const { isHealingAgentSession, handleHealingAgentLifecycleEnd } =
+      await import("../infra/log-monitor-agent-dispatch.js");
+    if (!isHealingAgentSession(entry.childSessionKey)) {
+      return false;
+    }
+    return await handleHealingAgentLifecycleEnd(runId, entry.childSessionKey, {
+      status: entry.outcome?.status ?? "unknown",
+      error: entry.outcome?.error,
+    });
+  } catch {
+    // Best-effort: don't break subagent lifecycle if healing dispatch is unavailable.
+    return false;
+  }
 }
