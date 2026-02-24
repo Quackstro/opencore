@@ -1,3 +1,5 @@
+// @openclaw-fork: KEEP OURS on merge — contains deferred-kill fix for deploy race condition.
+// See: fix(deploy): defer kill to after reply delivery (commit 9eb6a194e)
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import type { CommandHandler } from "./commands-types.js";
