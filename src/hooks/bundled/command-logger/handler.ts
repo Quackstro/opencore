@@ -23,11 +23,14 @@
  * ```
  */
 
+import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resolveStateDir } from "../../../config/paths.js";
-import { guardedAppend } from "../../../logging/circuit-breaker.js";
+import { createSubsystemLogger } from "../../../logging/subsystem.js";
 import type { HookHandler } from "../../hooks.js";
+
+const log = createSubsystemLogger("command-logger");
 
 /**
  * Log all command events to a file
@@ -39,8 +42,13 @@ const logCommand: HookHandler = async (event) => {
   }
 
   try {
+    // Create log directory
     const stateDir = resolveStateDir(process.env, os.homedir);
-    const logFile = path.join(stateDir, "logs", "commands.log");
+    const logDir = path.join(stateDir, "logs");
+    await fs.mkdir(logDir, { recursive: true });
+
+    // Append to command log file
+    const logFile = path.join(logDir, "commands.log");
     const logLine =
       JSON.stringify({
         timestamp: event.timestamp.toISOString(),
@@ -50,15 +58,10 @@ const logCommand: HookHandler = async (event) => {
         source: event.context.commandSource ?? "unknown",
       }) + "\n";
 
-    await guardedAppend(logFile, logLine, {
-      maxFileBytes: 10 * 1024 * 1024, // 10 MB
-      keepTailBytes: 1 * 1024 * 1024, // keep last 1 MB
-    });
+    await fs.appendFile(logFile, logLine, "utf-8");
   } catch (err) {
-    console.error(
-      "[command-logger] Failed to log command:",
-      err instanceof Error ? err.message : String(err),
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    log.error(`Failed to log command: ${message}`);
   }
 };
 

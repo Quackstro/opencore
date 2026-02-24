@@ -1,20 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   formatSkillsForPrompt,
   loadSkillsFromDir,
   type Skill,
 } from "@mariozechner/pi-coding-agent";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
-import type { RoutingContext, RoutingResult } from "./routing/types.js";
-import type {
-  ParsedSkillFrontmatter,
-  SkillEligibilityContext,
-  SkillCommandSpec,
-  SkillEntry,
-  SkillSnapshot,
-} from "./types.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
@@ -27,8 +19,14 @@ import {
   resolveSkillInvocationPolicy,
 } from "./frontmatter.js";
 import { resolvePluginSkillDirs } from "./plugin-skills.js";
-import { routeSkillsSync } from "./routing/router.js";
 import { serializeByKey } from "./serialize.js";
+import type {
+  ParsedSkillFrontmatter,
+  SkillEligibilityContext,
+  SkillCommandSpec,
+  SkillEntry,
+  SkillSnapshot,
+} from "./types.js";
 
 const fsp = fs.promises;
 const skillsLogger = createSubsystemLogger("skills");
@@ -407,15 +405,6 @@ function loadSkillEntries(
   return skillEntries;
 }
 
-/**
- * Extended SkillSnapshot with routing metadata.
- */
-export type SkillSnapshotWithRouting = SkillSnapshot & {
-  /** Routing result if dynamic routing was applied */
-  routingResult?: RoutingResult;
-  /** Eligible skill entries for thinking resolution */
-  entries?: SkillEntry[];
-};
 function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawConfig }): {
   skillsForPrompt: Skill[];
   truncated: boolean;
@@ -456,92 +445,9 @@ function applySkillsPromptLimits(params: { skills: Skill[]; config?: OpenClawCon
 
 export function buildWorkspaceSkillSnapshot(
   workspaceDir: string,
-  opts?: {
-    config?: OpenClawConfig;
-    managedSkillsDir?: string;
-    bundledSkillsDir?: string;
-    entries?: SkillEntry[];
-    /** If provided, only include skills with these names */
-    skillFilter?: string[];
-    eligibility?: SkillEligibilityContext;
-    snapshotVersion?: number;
-    /**
-     * If provided, enables dynamic skill routing based on message context.
-     * When routingContext is set, skills are filtered based on the routing
-     * configuration (skills.routing) in the config.
-     */
-    routingContext?: RoutingContext;
-  },
-): SkillSnapshotWithRouting {
-  const skillEntries = opts?.entries ?? loadSkillEntries(workspaceDir, opts);
-  let eligible = filterSkillEntries(
-    skillEntries,
-    opts?.config,
-    opts?.skillFilter,
-    opts?.eligibility,
-  );
-
-  // Apply dynamic routing if context is provided and routing is configured
-  let routingResult: RoutingResult | undefined;
-  if (opts?.routingContext && opts?.config?.skills?.routing) {
-    const routingConfig = opts.config.skills.routing;
-
-    // Only apply routing if mode is not static (or if mode is unset but config exists)
-    if (routingConfig.mode && routingConfig.mode !== "static") {
-      routingResult = routeSkillsSync(
-        eligible,
-        opts.routingContext,
-        {
-          mode: routingConfig.mode,
-          dynamic: routingConfig.dynamic,
-          hybrid: routingConfig.hybrid,
-          domainAliases: routingConfig.domainAliases,
-        },
-        opts.config.models?.capabilities
-          ? {
-              capabilities: opts.config.models.capabilities as Record<
-                string,
-                string[] | import("./routing/types.js").ModelCapabilityOverride
-              >,
-            }
-          : undefined,
-      );
-
-      // Filter to only routed skills
-      const selectedSet = new Set(routingResult.selectedSkills);
-      eligible = eligible.filter((e) => selectedSet.has(e.skill.name));
-
-      skillsLogger.info("skill-routing-applied", {
-        mode: routingResult.method,
-        original: skillEntries.length,
-        eligible: eligible.length,
-        selected: routingResult.selectedSkills.length,
-        capabilityExcluded: routingResult.capabilityExclusions?.length ?? 0,
-      });
-    }
-  }
-
-  const promptEntries = eligible.filter(
-    (entry) => entry.invocation?.disableModelInvocation !== true,
-  );
-  const resolvedSkills = promptEntries.map((entry) => entry.skill);
-  const remoteNote = opts?.eligibility?.remote?.note?.trim();
-  const { skillsForPrompt, truncated } = applySkillsPromptLimits({
-    skills: resolvedSkills,
-    config: opts?.config,
-  });
-
-  const truncationNote = truncated
-    ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${resolvedSkills.length}. Run \`openclaw skills check\` to audit.`
-    : "";
-
-  const prompt = [
-    remoteNote,
-    truncationNote,
-    formatSkillsForPrompt(compactSkillPaths(skillsForPrompt)),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  opts?: WorkspaceSkillBuildOptions & { snapshotVersion?: number },
+): SkillSnapshot {
+  const { eligible, prompt, resolvedSkills } = resolveWorkspaceSkillPromptState(workspaceDir, opts);
   const skillFilter = normalizeSkillFilter(opts?.skillFilter);
   return {
     prompt,
@@ -553,23 +459,34 @@ export function buildWorkspaceSkillSnapshot(
     ...(skillFilter === undefined ? {} : { skillFilter }),
     resolvedSkills,
     version: opts?.snapshotVersion,
-    routingResult,
-    entries: eligible,
   };
 }
 
 export function buildWorkspaceSkillsPrompt(
   workspaceDir: string,
-  opts?: {
-    config?: OpenClawConfig;
-    managedSkillsDir?: string;
-    bundledSkillsDir?: string;
-    entries?: SkillEntry[];
-    /** If provided, only include skills with these names */
-    skillFilter?: string[];
-    eligibility?: SkillEligibilityContext;
-  },
+  opts?: WorkspaceSkillBuildOptions,
 ): string {
+  return resolveWorkspaceSkillPromptState(workspaceDir, opts).prompt;
+}
+
+type WorkspaceSkillBuildOptions = {
+  config?: OpenClawConfig;
+  managedSkillsDir?: string;
+  bundledSkillsDir?: string;
+  entries?: SkillEntry[];
+  /** If provided, only include skills with these names */
+  skillFilter?: string[];
+  eligibility?: SkillEligibilityContext;
+};
+
+function resolveWorkspaceSkillPromptState(
+  workspaceDir: string,
+  opts?: WorkspaceSkillBuildOptions,
+): {
+  eligible: SkillEntry[];
+  prompt: string;
+  resolvedSkills: Skill[];
+} {
   const skillEntries = opts?.entries ?? loadSkillEntries(workspaceDir, opts);
   const eligible = filterSkillEntries(
     skillEntries,
@@ -589,9 +506,14 @@ export function buildWorkspaceSkillsPrompt(
   const truncationNote = truncated
     ? `⚠️ Skills truncated: included ${skillsForPrompt.length} of ${resolvedSkills.length}. Run \`openclaw skills check\` to audit.`
     : "";
-  return [remoteNote, truncationNote, formatSkillsForPrompt(compactSkillPaths(skillsForPrompt))]
+  const prompt = [
+    remoteNote,
+    truncationNote,
+    formatSkillsForPrompt(compactSkillPaths(skillsForPrompt)),
+  ]
     .filter(Boolean)
     .join("\n");
+  return { eligible, prompt, resolvedSkills };
 }
 
 export function resolveSkillsPromptForRun(params: {
@@ -700,14 +622,12 @@ export async function syncSkillsToWorkspace(params: {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : JSON.stringify(error);
-        console.warn(
-          `[skills] Failed to resolve safe destination for ${entry.skill.name}: ${message}`,
-        );
+        skillsLogger.warn(`Failed to resolve safe destination for ${entry.skill.name}: ${message}`);
         continue;
       }
       if (!dest) {
-        console.warn(
-          `[skills] Failed to resolve safe destination for ${entry.skill.name}: invalid source directory name`,
+        skillsLogger.warn(
+          `Failed to resolve safe destination for ${entry.skill.name}: invalid source directory name`,
         );
         continue;
       }
@@ -718,7 +638,7 @@ export async function syncSkillsToWorkspace(params: {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : JSON.stringify(error);
-        console.warn(`[skills] Failed to copy ${entry.skill.name} to sandbox: ${message}`);
+        skillsLogger.warn(`Failed to copy ${entry.skill.name} to sandbox: ${message}`);
       }
     }
   });
