@@ -46,6 +46,7 @@ import {
   resolveTelegramGroupAllowFromContext,
 } from "./bot/helpers.js";
 import type { TelegramContext } from "./bot/types.js";
+import { enforceTelegramDmAccess } from "./dm-access.js";
 import {
   evaluateTelegramGroupBaseAccess,
   evaluateTelegramGroupPolicyAccess,
@@ -72,6 +73,14 @@ function isRecoverableMediaGroupError(err: unknown): boolean {
   return err instanceof MediaFetchError || isMediaSizeLimitError(err);
 }
 
+function hasInboundMedia(msg: Message): boolean {
+  return (
+    Boolean(msg.media_group_id) ||
+    (Array.isArray(msg.photo) && msg.photo.length > 0) ||
+    Boolean(msg.video ?? msg.video_note ?? msg.document ?? msg.audio ?? msg.voice ?? msg.sticker)
+  );
+}
+
 export const registerTelegramHandlers = ({
   cfg,
   accountId,
@@ -80,6 +89,7 @@ export const registerTelegramHandlers = ({
   runtime,
   mediaMaxBytes,
   telegramCfg,
+  allowFrom,
   groupAllowFrom,
   resolveGroupPolicy,
   resolveTelegramGroupConfig,
@@ -1079,7 +1089,9 @@ export const registerTelegramHandlers = ({
               replyOpts.parse_mode = pluginResult.parseMode;
             }
             // Support both direct keyboard and channelData.telegram.buttons patterns
-            const pluginChannelData = (pluginResult as any)?.channelData?.telegram;
+            const pluginChannelData = (
+              pluginResult as unknown as { channelData?: { telegram?: { buttons?: unknown } } }
+            )?.channelData?.telegram;
             const buttons = pluginResult.keyboard ?? pluginChannelData?.buttons;
             if (buttons) {
               replyOpts.reply_markup = buildInlineKeyboard(buttons);
@@ -1217,11 +1229,12 @@ export const registerTelegramHandlers = ({
       if (shouldSkipUpdate(event.ctxForDedupe)) {
         return;
       }
+      const dmPolicy = telegramCfg.dmPolicy ?? "pairing";
 
       const groupAllowContext = await resolveTelegramGroupAllowFromContext({
         chatId: event.chatId,
         accountId,
-        dmPolicy: telegramCfg.dmPolicy ?? "pairing",
+        dmPolicy,
         isForum: event.isForum,
         messageThreadId: event.messageThreadId,
         groupAllowFrom,
@@ -1235,6 +1248,11 @@ export const registerTelegramHandlers = ({
         effectiveGroupAllow,
         hasGroupAllowOverride,
       } = groupAllowContext;
+      const effectiveDmAllow = normalizeAllowFromWithStore({
+        allowFrom,
+        storeAllowFrom,
+        dmPolicy,
+      });
 
       if (event.requireConfiguredGroup && (!groupConfig || groupConfig.enabled === false)) {
         logVerbose(`Blocked telegram channel ${event.chatId} (channel disabled)`);
@@ -1288,7 +1306,11 @@ export const registerTelegramHandlers = ({
               }
               const msgButtons =
                 pluginMsgResult.keyboard ??
-                (pluginMsgResult as any)?.channelData?.telegram?.buttons;
+                (
+                  pluginMsgResult as unknown as {
+                    channelData?: { telegram?: { buttons?: unknown } };
+                  }
+                )?.channelData?.telegram?.buttons;
               if (msgButtons) {
                 replyOpts.reply_markup = buildInlineKeyboard(msgButtons);
               }
@@ -1302,6 +1324,22 @@ export const registerTelegramHandlers = ({
           } catch (pluginMsgErr) {
             runtime.error?.(danger(`plugin message handler failed: ${String(pluginMsgErr)}`));
           }
+        }
+      }
+
+      if (!event.isGroup && hasInboundMedia(event.msg)) {
+        const dmAuthorized = await enforceTelegramDmAccess({
+          isGroup: event.isGroup,
+          dmPolicy,
+          msg: event.msg,
+          chatId: event.chatId,
+          effectiveDmAllow,
+          accountId,
+          bot,
+          logger,
+        });
+        if (!dmAuthorized) {
+          return;
         }
       }
 
