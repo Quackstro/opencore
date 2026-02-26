@@ -5,8 +5,6 @@ import type {
   ReactionTypeEmoji,
 } from "@grammyjs/types";
 import { type ApiClientOptions, Bot, HttpError, InputFile } from "grammy";
-import type { RetryConfig } from "../infra/retry.js";
-import type { TelegramInlineButtons } from "./button-types.js";
 import { loadConfig } from "../config/config.js";
 import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
 import { logVerbose } from "../globals.js";
@@ -14,6 +12,7 @@ import { recordChannelActivity } from "../infra/channel-activity.js";
 import { isDiagnosticFlagEnabled } from "../infra/diagnostic-flags.js";
 import { formatErrorMessage, formatUncaughtError } from "../infra/errors.js";
 import { createTelegramRetryRunner } from "../infra/retry-policy.js";
+import type { RetryConfig } from "../infra/retry.js";
 import { redactSensitiveText } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { mediaKindFromMime } from "../media/constants.js";
@@ -23,6 +22,7 @@ import { loadWebMedia } from "../web/media.js";
 import { type ResolvedTelegramAccount, resolveTelegramAccount } from "./accounts.js";
 import { withTelegramApiErrorLogging } from "./api-logging.js";
 import { buildTelegramThreadParams } from "./bot/helpers.js";
+import type { TelegramInlineButtons } from "./button-types.js";
 import { splitTelegramCaption } from "./caption.js";
 import { resolveTelegramFetch } from "./fetch.js";
 import { renderTelegramHtmlText } from "./format.js";
@@ -85,6 +85,16 @@ type TelegramReactionOpts = {
   verbose?: boolean;
   retry?: RetryConfig;
 };
+
+function resolveTelegramMessageIdOrThrow(
+  result: TelegramMessageLike | null | undefined,
+  context: string,
+): number {
+  if (typeof result?.message_id === "number" && Number.isFinite(result.message_id)) {
+    return Math.trunc(result.message_id);
+  }
+  throw new Error(`Telegram ${context} returned no message_id`);
+}
 
 const PARSE_ERR_RE = /can't parse entities|parse entities|find end of the entity/i;
 const THREAD_NOT_FOUND_RE = /400:\s*Bad Request:\s*message thread not found/i;
@@ -691,11 +701,9 @@ export async function sendMessageTelegram(
     })();
 
     const result = await sendMedia(mediaSender.label, mediaSender.sender);
-    const mediaMessageId = String(result?.message_id ?? "unknown");
+    const mediaMessageId = resolveTelegramMessageIdOrThrow(result, "media send");
     const resolvedChatId = String(result?.chat?.id ?? chatId);
-    if (result?.message_id) {
-      recordSentMessage(chatId, result.message_id);
-    }
+    recordSentMessage(chatId, mediaMessageId);
     recordChannelActivity({
       channel: "telegram",
       accountId: account.accountId,
@@ -714,13 +722,15 @@ export async function sendMessageTelegram(
           : undefined;
       const textRes = await sendTelegramText(followUpText, textParams);
       // Return the text message ID as the "main" message (it's the actual content).
+      const textMessageId = resolveTelegramMessageIdOrThrow(textRes, "text follow-up send");
+      recordSentMessage(chatId, textMessageId);
       return {
-        messageId: String(textRes?.message_id ?? mediaMessageId),
+        messageId: String(textMessageId),
         chatId: resolvedChatId,
       };
     }
 
-    return { messageId: mediaMessageId, chatId: resolvedChatId };
+    return { messageId: String(mediaMessageId), chatId: resolvedChatId };
   }
 
   if (!text || !text.trim()) {
@@ -734,16 +744,14 @@ export async function sendMessageTelegram(
         }
       : undefined;
   const res = await sendTelegramText(text, textParams, opts.plainText);
-  const messageId = String(res?.message_id ?? "unknown");
-  if (res?.message_id) {
-    recordSentMessage(chatId, res.message_id);
-  }
+  const messageId = resolveTelegramMessageIdOrThrow(res, "text send");
+  recordSentMessage(chatId, messageId);
   recordChannelActivity({
     channel: "telegram",
     accountId: account.accountId,
     direction: "outbound",
   });
-  return { messageId, chatId: String(res?.chat?.id ?? chatId) };
+  return { messageId: String(messageId), chatId: String(res?.chat?.id ?? chatId) };
 }
 
 export async function reactMessageTelegram(
@@ -1019,18 +1027,16 @@ export async function sendStickerTelegram(
       requestWithChatNotFound(() => api.sendSticker(chatId, fileId.trim(), effectiveParams), label),
   );
 
-  const messageId = String(result?.message_id ?? "unknown");
+  const messageId = resolveTelegramMessageIdOrThrow(result, "sticker send");
   const resolvedChatId = String(result?.chat?.id ?? chatId);
-  if (result?.message_id) {
-    recordSentMessage(chatId, result.message_id);
-  }
+  recordSentMessage(chatId, messageId);
   recordChannelActivity({
     channel: "telegram",
     accountId: account.accountId,
     direction: "outbound",
   });
 
-  return { messageId, chatId: resolvedChatId };
+  return { messageId: String(messageId), chatId: resolvedChatId };
 }
 
 type TelegramPollOpts = {
@@ -1127,12 +1133,10 @@ export async function sendPollTelegram(
       ),
   );
 
-  const messageId = String(result?.message_id ?? "unknown");
+  const messageId = resolveTelegramMessageIdOrThrow(result, "poll send");
   const resolvedChatId = String(result?.chat?.id ?? chatId);
   const pollId = result?.poll?.id;
-  if (result?.message_id) {
-    recordSentMessage(chatId, result.message_id);
-  }
+  recordSentMessage(chatId, messageId);
 
   recordChannelActivity({
     channel: "telegram",
@@ -1140,7 +1144,7 @@ export async function sendPollTelegram(
     direction: "outbound",
   });
 
-  return { messageId, chatId: resolvedChatId, pollId };
+  return { messageId: String(messageId), chatId: resolvedChatId, pollId };
 }
 
 // ---------------------------------------------------------------------------

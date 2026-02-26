@@ -1,8 +1,7 @@
-import type { CliDeps } from "../cli/deps.js";
-import type { loadConfig } from "../config/config.js";
-import type { loadOpenClawPlugins } from "../plugins/loader.js";
 import { initWorkflowEngine } from "../abstraction/bootstrap.js";
 import { registerWorkflowHooks } from "../abstraction/hooks.js";
+import { getAcpSessionManager } from "../acp/control-plane/manager.js";
+import { ACP_SESSION_IDENTITY_RENDERER_VERSION } from "../acp/runtime/session-identifiers.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import {
@@ -13,6 +12,8 @@ import {
 import { createOpenClawTools } from "../agents/openclaw-tools.js";
 import { resolveAgentSessionDirs } from "../agents/session-dirs.js";
 import { cleanStaleLockFiles } from "../agents/session-write-lock.js";
+import type { CliDeps } from "../cli/deps.js";
+import type { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { startGmailWatcherWithLogs } from "../hooks/gmail-watcher-lifecycle.js";
 import {
@@ -22,6 +23,7 @@ import {
 } from "../hooks/internal-hooks.js";
 import { loadInternalHooks } from "../hooks/loader.js";
 import { isTruthyEnvValue } from "../infra/env.js";
+import type { loadOpenClawPlugins } from "../plugins/loader.js";
 import { type PluginServicesHandle, startPluginServices } from "../plugins/services.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import {
@@ -175,6 +177,22 @@ export async function startGatewaySidecars(params: {
     params.log.warn(`plugin services failed to start: ${String(err)}`);
   }
 
+  if (params.cfg.acp?.enabled) {
+    void getAcpSessionManager()
+      .reconcilePendingSessionIdentities({ cfg: params.cfg })
+      .then((result) => {
+        if (result.checked === 0) {
+          return;
+        }
+        params.log.warn(
+          `acp startup identity reconcile (renderer=${ACP_SESSION_IDENTITY_RENDERER_VERSION}): checked=${result.checked} resolved=${result.resolved} failed=${result.failed}`,
+        );
+      })
+      .catch((err) => {
+        params.log.warn(`acp startup identity reconcile failed: ${String(err)}`);
+      });
+  }
+
   void startGatewayMemoryBackend({ cfg: params.cfg, log: params.log }).catch((err) => {
     params.log.warn(`qmd memory startup initialization failed: ${String(err)}`);
   });
@@ -185,7 +203,9 @@ export async function startGatewaySidecars(params: {
     try {
       const { startLogMonitor } = await import("../infra/log-monitor.js");
       // Use the default agent's session key so system events are delivered
-      const defaultAgent = params.cfg.agents?.list?.find((a: { default?: boolean }) => a.default) ?? params.cfg.agents?.list?.[0];
+      const defaultAgent =
+        params.cfg.agents?.list?.find((a: { default?: boolean }) => a.default) ??
+        params.cfg.agents?.list?.[0];
       const monitorSessionKey = defaultAgent ? `agent:${defaultAgent.id}:main` : undefined;
       // Resolve Telegram delivery target from bindings
       const defaultBinding = params.cfg.bindings?.find(
@@ -199,8 +219,12 @@ export async function startGatewaySidecars(params: {
         const homeDir = process.env.HOME || "/home/clawdbot";
         const allowFromPath = `${homeDir}/.openclaw/credentials/telegram-allowFrom.json`;
         if (fs.existsSync(allowFromPath)) {
-          const data = JSON.parse(fs.readFileSync(allowFromPath, "utf-8")) as { allowFrom?: string[] };
-          if (data.allowFrom?.[0]) {deliveryTo = data.allowFrom[0];}
+          const data = JSON.parse(fs.readFileSync(allowFromPath, "utf-8")) as {
+            allowFrom?: string[];
+          };
+          if (data.allowFrom?.[0]) {
+            deliveryTo = data.allowFrom[0];
+          }
         }
       } catch {
         // best-effort
