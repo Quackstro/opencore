@@ -1198,7 +1198,15 @@ export const registerTelegramHandlers = ({
             }
             // Support both direct keyboard and channelData.telegram.buttons patterns
             const pluginChannelData = (
-              pluginResult as unknown as { channelData?: { telegram?: { buttons?: unknown } } }
+              pluginResult as unknown as {
+                channelData?: {
+                  telegram?: {
+                    buttons?: ReadonlyArray<
+                      ReadonlyArray<{ text: string; callback_data: string; style?: string }>
+                    >;
+                  };
+                };
+              }
             )?.channelData?.telegram;
             const buttons = pluginResult.keyboard ?? pluginChannelData?.buttons;
             if (buttons) {
@@ -1411,7 +1419,13 @@ export const registerTelegramHandlers = ({
                 pluginMsgResult.keyboard ??
                 (
                   pluginMsgResult as unknown as {
-                    channelData?: { telegram?: { buttons?: unknown } };
+                    channelData?: {
+                      telegram?: {
+                        buttons?: ReadonlyArray<
+                          ReadonlyArray<{ text: string; callback_data: string; style?: string }>
+                        >;
+                      };
+                    };
                   }
                 )?.channelData?.telegram?.buttons;
               if (msgButtons) {
