@@ -1,0 +1,28 @@
+{
+  "name": "@openclaw/brain-actions",
+  "version": "2026.2.25",
+  "private": true,
+  "description": "Generic action framework for Brain drops - reminders, payments, and extensible hooks",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./detector": "./detector.ts",
+    "./time-extractor": "./time-extractor.ts",
+    "./router": "./router.ts",
+    "./handlers/reminder": "./handlers/reminder.ts",
+    "./handlers/payment": "./handlers/payment.ts"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "peerDependencies": {
+    "@openclaw/brain-core": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

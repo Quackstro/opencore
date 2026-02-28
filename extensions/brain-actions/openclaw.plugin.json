@@ -1,0 +1,115 @@
+{
+  "id": "brain-actions",
+  "name": "Brain Actions",
+  "description": "Generic action framework for Brain drops - detects intents (reminders, payments, todos) and routes to configurable handlers.",
+  "kind": "workflow",
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Actions",
+      "help": "Enable automatic action detection and routing"
+    },
+    "gatewayToken": {
+      "label": "Gateway Token",
+      "sensitive": true,
+      "help": "Token for LLM calls (time extraction)"
+    },
+    "timezone": {
+      "label": "Timezone",
+      "placeholder": "America/New_York",
+      "help": "User timezone for reminder scheduling"
+    },
+    "extractionModel": {
+      "label": "Extraction Model",
+      "placeholder": "claude-haiku-3.5",
+      "help": "Model for time extraction"
+    },
+    "reminder.enabled": {
+      "label": "Enable Reminders",
+      "help": "Enable reminder detection and cron job creation"
+    },
+    "reminder.nagIntervalMinutes": {
+      "label": "Nag Interval",
+      "placeholder": "5",
+      "help": "Minutes between reminder nags"
+    },
+    "payment.enabled": {
+      "label": "Enable Payments",
+      "help": "Enable payment intent detection"
+    },
+    "payment.autoExecuteThreshold": {
+      "label": "Auto-Execute Threshold",
+      "placeholder": "0.95",
+      "help": "Confidence threshold for auto-executing payments (0.0-1.0)"
+    },
+    "payment.maxAutoExecuteAmount": {
+      "label": "Max Auto-Execute Amount",
+      "placeholder": "10",
+      "help": "Maximum amount for auto-execution (in DOGE)"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "gatewayToken": {
+        "type": "string",
+        "description": "Token for gateway LLM calls"
+      },
+      "gatewayUrl": {
+        "type": "string",
+        "default": "http://127.0.0.1:18789"
+      },
+      "timezone": {
+        "type": "string",
+        "default": "America/New_York"
+      },
+      "extractionModel": {
+        "type": "string",
+        "default": "claude-haiku-3.5"
+      },
+      "reminder": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "nagIntervalMinutes": {
+            "type": "number",
+            "default": 5
+          },
+          "defaultTime": {
+            "type": "string",
+            "default": "09:00",
+            "description": "Default time when only date is specified"
+          }
+        }
+      },
+      "payment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          },
+          "autoExecuteThreshold": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.95
+          },
+          "maxAutoExecuteAmount": {
+            "type": "number",
+            "default": 10
+          }
+        }
+      }
+    }
+  }
+}

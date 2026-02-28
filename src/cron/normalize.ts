@@ -1,4 +1,3 @@
-import type { CronJobCreate, CronJobPatch } from "./types.js";
 import { sanitizeAgentId } from "../routing/session-key.js";
 import { isRecord } from "../utils.js";
 import {
@@ -10,6 +9,7 @@ import { parseAbsoluteTimeMs } from "./parse.js";
 import { migrateLegacyCronPayload } from "./payload-migration.js";
 import { inferLegacyName } from "./service/normalize.js";
 import { normalizeCronStaggerMs, resolveDefaultCronStaggerMs } from "./stagger.js";
+import type { CronJobCreate, CronJobPatch } from "./types.js";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -182,6 +182,16 @@ function coerceDelivery(delivery: UnknownRecord) {
     } else {
       delete next.to;
     }
+  }
+  if (typeof delivery.accountId === "string") {
+    const trimmed = delivery.accountId.trim();
+    if (trimmed) {
+      next.accountId = trimmed;
+    } else {
+      delete next.accountId;
+    }
+  } else if ("accountId" in next && typeof next.accountId !== "string") {
+    delete next.accountId;
   }
   return next;
 }

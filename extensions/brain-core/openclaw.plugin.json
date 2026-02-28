@@ -1,0 +1,124 @@
+{
+  "id": "brain-core",
+  "name": "Brain Core",
+  "description": "Generic bucket-based memory system with LLM classification. Captures thoughts, classifies them into configurable buckets, and provides semantic search.",
+  "kind": "memory",
+  "uiHints": {
+    "storage.dbPath": {
+      "label": "Database Path",
+      "placeholder": "~/.openclaw/brain/lancedb",
+      "advanced": true,
+      "help": "Path to the LanceDB database directory"
+    },
+    "buckets": {
+      "label": "Buckets",
+      "help": "List of bucket names for organizing thoughts",
+      "advanced": true
+    },
+    "embedding.provider": {
+      "label": "Embedding Provider",
+      "help": "gemini or openai"
+    },
+    "embedding.apiKey": {
+      "label": "Embedding API Key",
+      "sensitive": true,
+      "placeholder": "sk-... or AI...",
+      "help": "API key for embeddings (Gemini keys start with AI, otherwise OpenAI)"
+    },
+    "embedding.model": {
+      "label": "Embedding Model",
+      "placeholder": "text-embedding-3-small",
+      "help": "Model to use for embeddings"
+    },
+    "classifier.apiKey": {
+      "label": "Classifier API Key",
+      "sensitive": true,
+      "help": "API key for LLM classification (uses OpenClaw gateway if not set)"
+    },
+    "classifier.model": {
+      "label": "Classifier Model",
+      "placeholder": "claude-haiku-3.5",
+      "help": "Model to use for classification"
+    },
+    "confidenceThreshold": {
+      "label": "Confidence Threshold",
+      "placeholder": "0.80",
+      "help": "Minimum confidence score for automatic routing (0.0-1.0)"
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "storage": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dbPath": {
+            "type": "string",
+            "default": "~/.openclaw/brain/lancedb"
+          }
+        }
+      },
+      "buckets": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": [
+          "people",
+          "projects",
+          "ideas",
+          "admin",
+          "documents",
+          "goals",
+          "health",
+          "finance"
+        ],
+        "description": "List of bucket names for organizing thoughts"
+      },
+      "embedding": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": ["gemini", "openai", "auto"],
+            "default": "auto"
+          },
+          "apiKey": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string",
+            "default": "text-embedding-3-small"
+          },
+          "baseURL": {
+            "type": "string",
+            "description": "Custom base URL for OpenAI-compatible APIs"
+          }
+        },
+        "required": ["apiKey"]
+      },
+      "classifier": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "description": "API key for classification (uses gateway token if not set)"
+          },
+          "model": {
+            "type": "string",
+            "default": "claude-haiku-3.5"
+          }
+        }
+      },
+      "confidenceThreshold": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1,
+        "default": 0.8
+      }
+    },
+    "required": ["embedding"]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "@openclaw/brain-core",
+  "version": "2026.2.25",
+  "private": true,
+  "description": "OpenClaw generic bucket-based memory system with LLM classification",
+  "type": "module",
+  "main": "index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./store": "./store.ts",
+    "./schemas": "./schemas.ts",
+    "./classifier": "./classifier.ts",
+    "./embeddings": "./embeddings.ts",
+    "./tag-parser": "./tag-parser.ts",
+    "./audit": "./audit.ts",
+    "./router": "./router.ts",
+    "./commands/drop": "./commands/drop.ts",
+    "./commands/fix": "./commands/fix.ts"
+  },
+  "dependencies": {
+    "@lancedb/lancedb": "^0.26.2",
+    "@sinclair/typebox": "0.34.48"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

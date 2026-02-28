@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { CronServiceState } from "./service/state.js";
-import type { CronJob, CronJobPatch } from "./types.js";
 import { applyJobPatch, createJob } from "./service/jobs.js";
+import type { CronServiceState } from "./service/state.js";
 import { DEFAULT_TOP_OF_HOUR_STAGGER_MS } from "./stagger.js";
+import type { CronJob, CronJobPatch } from "./types.js";
 
 describe("applyJobPatch", () => {
   const createIsolatedAgentTurnJob = (
@@ -113,6 +113,28 @@ describe("applyJobPatch", () => {
       to: "999",
       bestEffort: undefined,
     });
+  });
+
+  it("merges delivery.accountId from patch and preserves existing", () => {
+    const job = createIsolatedAgentTurnJob("job-acct", {
+      mode: "announce",
+      channel: "telegram",
+      to: "-100123",
+    });
+
+    applyJobPatch(job, { delivery: { mode: "announce", accountId: " coordinator " } });
+    expect(job.delivery?.accountId).toBe("coordinator");
+    expect(job.delivery?.mode).toBe("announce");
+    expect(job.delivery?.to).toBe("-100123");
+
+    // Updating other fields preserves accountId
+    applyJobPatch(job, { delivery: { mode: "announce", to: "-100999" } });
+    expect(job.delivery?.accountId).toBe("coordinator");
+    expect(job.delivery?.to).toBe("-100999");
+
+    // Clearing accountId with empty string
+    applyJobPatch(job, { delivery: { mode: "announce", accountId: "" } });
+    expect(job.delivery?.accountId).toBeUndefined();
   });
 
   it("rejects webhook delivery without a valid http(s) target URL", () => {

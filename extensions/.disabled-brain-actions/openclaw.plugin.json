@@ -1,0 +1,125 @@
+{
+  "$schema": "../../src/config-schema.json",
+  "id": "brain-actions",
+  "name": "Brain Actions",
+  "description": "Generic action detection and routing framework for Brain drops. Detects time-sensitive patterns, payment intents, and other actionable items. Uses configurable hooks for notification delivery and payment execution.",
+  "version": "2026.2.25",
+  "kind": "behavior",
+  "config": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "description": "Enable action routing",
+        "default": true
+      },
+      "timezone": {
+        "type": "string",
+        "description": "Default timezone for time extraction (IANA format)",
+        "default": "America/New_York"
+      },
+      "extractionModel": {
+        "type": "string",
+        "description": "LLM model for time extraction",
+        "default": "claude-haiku-3.5"
+      },
+      "gatewayUrl": {
+        "type": "string",
+        "description": "Gateway URL for LLM calls",
+        "default": "http://127.0.0.1:18789"
+      },
+      "actionTypes": {
+        "type": "object",
+        "description": "Enable/disable specific action types",
+        "properties": {
+          "reminder": { "type": "boolean", "default": true },
+          "booking": { "type": "boolean", "default": true },
+          "todo": { "type": "boolean", "default": true },
+          "purchase": { "type": "boolean", "default": true },
+          "call": { "type": "boolean", "default": true },
+          "payment": { "type": "boolean", "default": true }
+        },
+        "default": {
+          "reminder": true,
+          "booking": true,
+          "todo": true,
+          "purchase": true,
+          "call": true,
+          "payment": true
+        }
+      },
+      "reminder": {
+        "type": "object",
+        "description": "Reminder-specific configuration",
+        "properties": {
+          "nagIntervalMinutes": {
+            "type": "number",
+            "description": "Minutes between nag reminders",
+            "default": 5
+          },
+          "defaultTime": {
+            "type": "string",
+            "description": "Default reminder time when only date is specified",
+            "default": "09:00"
+          }
+        }
+      },
+      "payment": {
+        "type": "object",
+        "description": "Payment action configuration",
+        "properties": {
+          "autoApproveThreshold": {
+            "type": "number",
+            "description": "Execution score threshold for auto-approval (0-1)",
+            "default": 0.95
+          },
+          "promptThreshold": {
+            "type": "number",
+            "description": "Score threshold below which to prompt user",
+            "default": 0.7
+          },
+          "maxAutoAmount": {
+            "type": "number",
+            "description": "Maximum amount for auto-execution (in DOGE)",
+            "default": 50
+          }
+        }
+      }
+    },
+    "required": []
+  },
+  "hooks": {
+    "onReminderCreate": {
+      "description": "Called when a reminder is created. Return false to cancel.",
+      "params": ["reminder", "extraction"]
+    },
+    "onReminderDeliver": {
+      "description": "Called to deliver a reminder notification. Must be implemented by consumer.",
+      "params": ["reminderText", "nagJobId", "config"]
+    },
+    "onPaymentPropose": {
+      "description": "Called when a payment is proposed. Return modified action or null to cancel.",
+      "params": ["action", "resolution"]
+    },
+    "onPaymentApprove": {
+      "description": "Called to prompt user for payment approval.",
+      "params": ["action", "policyDecision"]
+    },
+    "onPaymentExecute": {
+      "description": "Called to execute a payment. Must return txid on success.",
+      "params": ["address", "amount", "reason"]
+    },
+    "onPaymentComplete": {
+      "description": "Called after successful payment execution.",
+      "params": ["action", "txid"]
+    },
+    "onPaymentFailed": {
+      "description": "Called when payment fails.",
+      "params": ["action", "error"]
+    },
+    "onActionRouted": {
+      "description": "Called after any action is routed (for logging/audit).",
+      "params": ["actionType", "result", "inboxId"]
+    }
+  }
+}
