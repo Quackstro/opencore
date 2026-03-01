@@ -1,11 +1,11 @@
-import type { CronJob, CronSchedule } from "../../cron/types.js";
-import type { GatewayRpcOpts } from "../gateway-rpc.js";
 import { listChannelPlugins } from "../../channels/plugins/index.js";
 import { parseAbsoluteTimeMs } from "../../cron/parse.js";
 import { resolveCronStaggerMs } from "../../cron/stagger.js";
+import type { CronJob, CronSchedule } from "../../cron/types.js";
 import { formatDurationHuman } from "../../infra/format-time/format-duration.ts";
 import { defaultRuntime } from "../../runtime.js";
 import { colorize, isRich, theme } from "../../terminal/theme.js";
+import type { GatewayRpcOpts } from "../gateway-rpc.js";
 import { callGatewayFromCli } from "../gateway-rpc.js";
 
 export const getCronChannelOptions = () =>
@@ -86,6 +86,7 @@ const CRON_LAST_PAD = 10;
 const CRON_STATUS_PAD = 9;
 const CRON_TARGET_PAD = 9;
 const CRON_AGENT_PAD = 10;
+const CRON_MODEL_PAD = 20;
 
 const pad = (value: string, width: number) => value.padEnd(width);
 
@@ -171,7 +172,8 @@ export function printCronList(jobs: CronJob[], runtime = defaultRuntime) {
     pad("Last", CRON_LAST_PAD),
     pad("Status", CRON_STATUS_PAD),
     pad("Target", CRON_TARGET_PAD),
-    pad("Agent", CRON_AGENT_PAD),
+    pad("Agent ID", CRON_AGENT_PAD),
+    pad("Model", CRON_MODEL_PAD),
   ].join(" ");
 
   runtime.log(rich ? theme.heading(header) : header);
@@ -192,7 +194,14 @@ export function printCronList(jobs: CronJob[], runtime = defaultRuntime) {
     const statusRaw = formatStatus(job);
     const statusLabel = pad(statusRaw, CRON_STATUS_PAD);
     const targetLabel = pad(job.sessionTarget ?? "-", CRON_TARGET_PAD);
-    const agentLabel = pad(truncate(job.agentId ?? "default", CRON_AGENT_PAD), CRON_AGENT_PAD);
+    const agentLabel = pad(truncate(job.agentId ?? "-", CRON_AGENT_PAD), CRON_AGENT_PAD);
+    const modelLabel = pad(
+      truncate(
+        (job.payload.kind === "agentTurn" ? job.payload.model : undefined) ?? "-",
+        CRON_MODEL_PAD,
+      ),
+      CRON_MODEL_PAD,
+    );
 
     const coloredStatus = (() => {
       if (statusRaw === "ok") {
@@ -227,6 +236,9 @@ export function printCronList(jobs: CronJob[], runtime = defaultRuntime) {
       coloredStatus,
       coloredTarget,
       coloredAgent,
+      job.payload.kind === "agentTurn" && job.payload.model
+        ? colorize(rich, theme.info, modelLabel)
+        : colorize(rich, theme.muted, modelLabel),
     ].join(" ");
 
     runtime.log(line.trimEnd());
