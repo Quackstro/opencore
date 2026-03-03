@@ -67,7 +67,7 @@ import {
   resolveModelSelection,
   type ProviderInfo,
 } from "./model-buttons.js";
-import { buildInlineKeyboard } from "./send.js";
+import { buildInlineKeyboard, type TelegramSendOpts } from "./send.js";
 import { wasSentByBot } from "./sent-message-cache.js";
 
 function isMediaSizeLimitError(err: unknown): boolean {
@@ -1274,7 +1274,9 @@ export const registerTelegramHandlers = ({
                 };
               }
             )?.channelData?.telegram;
-            const buttons = pluginResult.keyboard ?? pluginChannelData?.buttons;
+            const buttons = (pluginResult.keyboard ?? pluginChannelData?.buttons) as
+              | TelegramSendOpts["buttons"]
+              | undefined;
             if (buttons) {
               replyOpts.reply_markup = buildInlineKeyboard(buttons);
             }
@@ -1500,7 +1502,9 @@ export const registerTelegramHandlers = ({
                   }
                 )?.channelData?.telegram?.buttons;
               if (msgButtons) {
-                replyOpts.reply_markup = buildInlineKeyboard(msgButtons);
+                replyOpts.reply_markup = buildInlineKeyboard(
+                  msgButtons as TelegramSendOpts["buttons"],
+                );
               }
               await withTelegramApiErrorLogging({
                 operation: "sendMessage",

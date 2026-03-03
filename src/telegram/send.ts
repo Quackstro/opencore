@@ -41,7 +41,7 @@ import { resolveTelegramVoiceSend } from "./voice.js";
 type TelegramApi = Bot["api"];
 type TelegramApiOverride = Partial<TelegramApi>;
 
-type TelegramSendOpts = {
+export type TelegramSendOpts = {
   token?: string;
   accountId?: string;
   verbose?: boolean;
