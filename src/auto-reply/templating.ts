@@ -137,6 +137,11 @@ export type MsgContext = {
   ChatId?: string;
   /** Provider-native message ID. Used by plugin command handlers for message deletion etc. */
   MessageId?: string;
+  /**
+   * Internal flag: command handling prepared trailing prompt text for ACP dispatch.
+   * Used for `/new <prompt>` and `/reset <prompt>` on ACP-bound sessions.
+   */
+  AcpDispatchTailAfterReset?: boolean;
   /** Gateway client scopes when the message originates from the gateway. */
   GatewayClientScopes?: string[];
   /** Thread identifier (Telegram topic id or Matrix thread event id). */
@@ -156,6 +161,11 @@ export type MsgContext = {
    * The chat/channel/user ID where the reply should be sent.
    */
   OriginatingTo?: string;
+  /**
+   * Provider-specific parent conversation id for threaded contexts.
+   * For Discord threads, this is the parent channel id.
+   */
+  ThreadParentId?: string;
   /**
    * Messages from hooks to be included in the response.
    * Used for hook confirmation messages like "Session context saved to memory".
