@@ -5,6 +5,8 @@ import { handleBashCommand } from "./commands-bash.js";
 import { handleBtwCommand } from "./commands-btw.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleDeployCommand } from "./commands-deploy.js";
+import { handleHealthcheckCommand } from "./commands-healthcheck.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
@@ -61,5 +63,7 @@ export function loadCommandHandlers(): CommandHandler[] {
     handleStopCommand,
     handleCompactCommand,
     handleAbortTrigger,
+    handleDeployCommand,
+    handleHealthcheckCommand,
   ];
 }
