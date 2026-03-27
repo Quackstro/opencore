@@ -7,8 +7,7 @@ import { createAllowlistProviderRouteAllowlistWarningCollector } from "openclaw/
 import { attachChannelToResult } from "openclaw/plugin-sdk/channel-send-result";
 import { createChatChannelPlugin } from "openclaw/plugin-sdk/core";
 import { createChannelDirectoryAdapter } from "openclaw/plugin-sdk/directory-runtime";
-import { resolveExecApprovalCommandDisplay } from "openclaw/plugin-sdk/infra-runtime";
-import { buildExecApprovalPendingReplyPayload } from "openclaw/plugin-sdk/infra-runtime";
+import { buildPluginApprovalRequestMessage } from "openclaw/plugin-sdk/infra-runtime";
 import {
   resolveOutboundSendDep,
   type OutboundSendDeps,
@@ -40,6 +39,7 @@ import {
   resolveTelegramAccount,
   type ResolvedTelegramAccount,
 } from "./accounts.js";
+import { resolveTelegramAutoThreadId } from "./action-threading.js";
 import { buildTelegramExecApprovalButtons } from "./approval-buttons.js";
 import { auditTelegramGroupMembership, collectTelegramUnmentionedGroupIds } from "./audit.js";
 import { buildTelegramGroupPeerId } from "./bot/helpers.js";
@@ -47,6 +47,10 @@ import {
   listTelegramDirectoryGroupsFromConfig,
   listTelegramDirectoryPeersFromConfig,
 } from "./directory-config.js";
+import {
+  buildTelegramExecApprovalPendingPayload,
+  shouldSuppressTelegramExecApprovalForwardingFallback,
+} from "./exec-approval-forwarding.js";
 import {
   isTelegramExecApprovalClientEnabled,
   resolveTelegramExecApprovalTarget,
@@ -136,22 +140,6 @@ async function sendTelegramOutbound(params: {
       gatewayClientScopes: params.gatewayClientScopes,
     }),
   );
-}
-
-function resolveTelegramAutoThreadId(params: {
-  to: string;
-  toolContext?: { currentThreadTs?: string; currentChannelId?: string };
-}): string | undefined {
-  const context = params.toolContext;
-  if (!context?.currentThreadTs || !context.currentChannelId) {
-    return undefined;
-  }
-  const parsedTo = parseTelegramTarget(params.to);
-  const parsedChannel = parseTelegramTarget(context.currentChannelId);
-  if (parsedTo.chatId.toLowerCase() !== parsedChannel.chatId.toLowerCase()) {
-    return undefined;
-  }
-  return context.currentThreadTs;
 }
 
 function normalizeTelegramAcpConversationId(conversationId: string) {
@@ -378,12 +366,12 @@ export const telegramPlugin = createChatChannelPlugin({
         const previousToken = resolveTelegramAccount({ cfg: prevCfg, accountId }).token.trim();
         const nextToken = resolveTelegramAccount({ cfg: nextCfg, accountId }).token.trim();
         if (previousToken !== nextToken) {
-          const { deleteTelegramUpdateOffset } = await import("./update-offset-store.js");
+          const { deleteTelegramUpdateOffset } = await import("../update-offset-runtime-api.js");
           await deleteTelegramUpdateOffset({ accountId });
         }
       },
       onAccountRemoved: async ({ accountId }) => {
-        const { deleteTelegramUpdateOffset } = await import("./update-offset-store.js");
+        const { deleteTelegramUpdateOffset } = await import("../update-offset-runtime-api.js");
         await deleteTelegramUpdateOffset({ accountId });
       },
     },
@@ -393,44 +381,10 @@ export const telegramPlugin = createChatChannelPlugin({
           ? { kind: "enabled" }
           : { kind: "disabled" },
       hasConfiguredDmRoute: ({ cfg }) => hasTelegramExecApprovalDmRoute(cfg),
-      shouldSuppressForwardingFallback: ({ cfg, target, request }) => {
-        const channel = normalizeMessageChannel(target.channel) ?? target.channel;
-        if (channel !== "telegram") {
-          return false;
-        }
-        const requestChannel = normalizeMessageChannel(request.request.turnSourceChannel ?? "");
-        if (requestChannel !== "telegram") {
-          return false;
-        }
-        const accountId = target.accountId?.trim() || request.request.turnSourceAccountId?.trim();
-        return isTelegramExecApprovalClientEnabled({ cfg, accountId });
-      },
-      buildPendingPayload: ({ request, nowMs }) => {
-        const payload = buildExecApprovalPendingReplyPayload({
-          approvalId: request.id,
-          approvalSlug: request.id.slice(0, 8),
-          approvalCommandId: request.id,
-          command: resolveExecApprovalCommandDisplay(request.request).commandText,
-          cwd: request.request.cwd ?? undefined,
-          host: request.request.host === "node" ? "node" : "gateway",
-          nodeId: request.request.nodeId ?? undefined,
-          expiresAtMs: request.expiresAtMs,
-          nowMs,
-        });
-        const buttons = buildTelegramExecApprovalButtons(request.id);
-        if (!buttons) {
-          return payload;
-        }
-        return {
-          ...payload,
-          channelData: {
-            ...payload.channelData,
-            telegram: {
-              buttons,
-            },
-          },
-        };
-      },
+      shouldSuppressForwardingFallback: (params) =>
+        shouldSuppressTelegramExecApprovalForwardingFallback(params),
+      buildPendingPayload: ({ request, nowMs }) =>
+        buildTelegramExecApprovalPendingPayload({ request, nowMs }),
       beforeDeliverPending: async ({ cfg, target, payload }) => {
         const hasExecApprovalData =
           payload.channelData &&
@@ -451,6 +405,32 @@ export const telegramPlugin = createChatChannelPlugin({
           accountId: target.accountId ?? undefined,
           ...(Number.isFinite(threadId) ? { messageThreadId: threadId } : {}),
         }).catch(() => {});
+      },
+      buildPluginPendingPayload: ({ request, nowMs }) => {
+        const text = buildPluginApprovalRequestMessage(request, nowMs);
+        const buttons = buildTelegramExecApprovalButtons(request.id);
+        const execApproval = {
+          approvalId: request.id,
+          approvalSlug: request.id,
+          allowedDecisions: ["allow-once", "allow-always", "deny"] as const,
+        };
+        if (!buttons) {
+          return {
+            text,
+            channelData: {
+              execApproval,
+            },
+          };
+        }
+        return {
+          text,
+          channelData: {
+            execApproval,
+            telegram: {
+              buttons,
+            },
+          },
+        };
       },
     },
     directory: createChannelDirectoryAdapter({
