@@ -54,6 +54,32 @@ export type TelegramExecApprovalHandlerDeps = {
   editReplyMarkup?: typeof editMessageReplyMarkupTelegram;
 };
 
+function isRequestScopedToOtherAccount(params: {
+  cfg: OpenClawConfig;
+  accountId: string;
+  request: ExecApprovalRequest;
+}): boolean {
+  const turnSourceChannel = params.request.request.turnSourceChannel?.trim().toLowerCase() || "";
+  const turnSourceAccountId = params.request.request.turnSourceAccountId?.trim() || "";
+
+  // If the request originated from telegram with a known account, only the
+  // matching handler should deliver the approval message.
+  if (turnSourceChannel === "telegram" && turnSourceAccountId) {
+    return normalizeAccountId(turnSourceAccountId) !== normalizeAccountId(params.accountId);
+  }
+
+  // For non-telegram sources, check whether the session is bound to a
+  // specific telegram account via session-target resolution.
+  const sessionTarget = resolveRequestSessionTarget({ cfg: params.cfg, request: params.request });
+  if (sessionTarget?.channel === "telegram" && sessionTarget.accountId) {
+    return normalizeAccountId(sessionTarget.accountId) !== normalizeAccountId(params.accountId);
+  }
+
+  // Cannot determine the owning account — let the handler proceed so the
+  // approval is not silently dropped.
+  return false;
+}
+
 function matchesFilters(params: {
   cfg: OpenClawConfig;
   accountId: string;
@@ -71,6 +97,9 @@ function matchesFilters(params: {
     accountId: params.accountId,
   });
   if (approvers.length === 0) {
+    return false;
+  }
+  if (isRequestScopedToOtherAccount(params)) {
     return false;
   }
   if (config.agentFilter?.length) {

@@ -17,7 +17,7 @@ const baseRequest = {
   expiresAtMs: 61_000,
 };
 
-function createHandler(cfg: OpenClawConfig) {
+function createHandler(cfg: OpenClawConfig, accountId = "default") {
   const sendTyping = vi.fn().mockResolvedValue({ ok: true });
   const sendMessage = vi
     .fn()
@@ -27,7 +27,7 @@ function createHandler(cfg: OpenClawConfig) {
   const handler = new TelegramExecApprovalHandler(
     {
       token: "tg-token",
-      accountId: "default",
+      accountId,
       cfg,
     },
     {
@@ -119,6 +119,45 @@ describe("TelegramExecApprovalHandler", () => {
 
     expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(sendMessage.mock.calls.map((call) => call[0])).toEqual(["111", "222"]);
+  });
+
+  it("skips approval when request is scoped to a different telegram account", async () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          execApprovals: {
+            enabled: true,
+            approvers: ["8460800771"],
+            target: "dm",
+          },
+        },
+      },
+    } as OpenClawConfig;
+    const { handler, sendMessage } = createHandler(cfg, "dev");
+
+    await handler.handleRequested(baseRequest); // baseRequest has turnSourceAccountId: "default"
+
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("delivers approval when request account matches handler account", async () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          execApprovals: {
+            enabled: true,
+            approvers: ["8460800771"],
+            target: "dm",
+          },
+        },
+      },
+    } as OpenClawConfig;
+    const { handler, sendMessage } = createHandler(cfg, "default");
+
+    await handler.handleRequested(baseRequest);
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toBe("8460800771");
   });
 
   it("clears buttons from tracked approval messages when resolved", async () => {
