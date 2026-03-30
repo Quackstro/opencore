@@ -8,7 +8,6 @@
 import { parseExplicitTargetForChannel } from "../channels/plugins/target-parsing.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { logVerbose } from "../globals.js";
-import { parseTelegramTarget } from "../plugin-sdk/telegram-runtime.js";
 import {
   clearPluginCommands,
   clearPluginCommandsForPlugin,
@@ -148,6 +147,7 @@ function resolveBindingConversationFromCommand(params: {
   to?: string;
   accountId?: string;
   messageThreadId?: string | number;
+  threadParentId?: string;
 }): {
   channel: string;
   accountId: string;
@@ -157,20 +157,24 @@ function resolveBindingConversationFromCommand(params: {
 } | null {
   const accountId = params.accountId?.trim() || "default";
   if (params.channel === "telegram") {
-    const rawTarget = params.to ?? params.from;
+    // Native Telegram slash commands use a synthetic `To: slash:<senderId>` value.
+    // Prefer `from` so binding resolution parses the real chat/topic peer.
+    const rawTarget =
+      params.to && params.to.startsWith("slash:")
+        ? (params.from ?? params.to)
+        : (params.to ?? params.from);
     if (!rawTarget) {
       return null;
     }
     const target = parseExplicitTargetForChannel("telegram", rawTarget);
-    const fallbackTarget = target ? null : parseTelegramTarget(rawTarget);
-    if (!target && !fallbackTarget) {
+    if (!target) {
       return null;
     }
     return {
       channel: "telegram",
       accountId,
-      conversationId: target?.to ?? fallbackTarget?.chatId ?? "",
-      threadId: params.messageThreadId ?? target?.threadId ?? fallbackTarget?.messageThreadId,
+      conversationId: target.to,
+      threadId: params.messageThreadId ?? target.threadId,
     };
   }
   if (params.channel === "discord") {
@@ -193,7 +197,9 @@ function resolveBindingConversationFromCommand(params: {
       conversationId:
         "conversationId" in target
           ? target.conversationId
-          : `${target.chatType === "group" ? "channel" : "user"}:${target.to}`,
+          : `${target.chatType === "direct" ? "user" : "channel"}:${target.to}`,
+      parentConversationId: params.threadParentId?.trim() || undefined,
+      threadId: params.messageThreadId,
     };
   }
   return null;
@@ -219,6 +225,7 @@ export async function executePluginCommand(params: {
   to?: PluginCommandContext["to"];
   accountId?: PluginCommandContext["accountId"];
   messageThreadId?: PluginCommandContext["messageThreadId"];
+  threadParentId?: PluginCommandContext["threadParentId"];
 }): Promise<PluginCommandResult> {
   const { command, args, senderId, channel, isAuthorizedSender, commandBody, config } = params;
 
@@ -239,6 +246,7 @@ export async function executePluginCommand(params: {
     to: params.to,
     accountId: params.accountId,
     messageThreadId: params.messageThreadId,
+    threadParentId: params.threadParentId,
   });
 
   const ctx: PluginCommandContext = {
@@ -254,6 +262,7 @@ export async function executePluginCommand(params: {
     to: params.to,
     accountId: params.accountId,
     messageThreadId: params.messageThreadId,
+    threadParentId: params.threadParentId,
     requestConversationBinding: async (bindingParams) => {
       if (!command.pluginRoot || !bindingConversation) {
         return {

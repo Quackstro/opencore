@@ -1,10 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createRuntimeEnv } from "../../../test/helpers/extensions/runtime-env.js";
+import { createRuntimeEnv } from "../../../test/helpers/plugins/runtime-env.js";
 import { slackPlugin } from "./channel.js";
 import { slackOutbound } from "./outbound-adapter.js";
+import * as probeModule from "./probe.js";
 import type { OpenClawConfig } from "./runtime-api.js";
-import { setSlackRuntime } from "./runtime.js";
+import { clearSlackRuntime, setSlackRuntime } from "./runtime.js";
 
 const handleSlackActionMock = vi.fn();
 
@@ -117,6 +118,24 @@ describe("slackPlugin actions", () => {
     expect(Type.Object(schema.properties).required).toBeUndefined();
   });
 
+  it("treats interactive reply payloads as structured Slack payloads", () => {
+    const hasStructuredReplyPayload = slackPlugin.messaging?.hasStructuredReplyPayload;
+    if (!hasStructuredReplyPayload) {
+      throw new Error("slack messaging.hasStructuredReplyPayload unavailable");
+    }
+
+    expect(
+      hasStructuredReplyPayload({
+        payload: {
+          text: "Choose",
+          interactive: {
+            blocks: [{ type: "buttons", buttons: [{ label: "Retry", value: "retry" }] }],
+          },
+        },
+      }),
+    ).toBe(true);
+  });
+
   it("forwards read threadId to Slack action handler", async () => {
     handleSlackActionMock.mockResolvedValueOnce({ messages: [], hasMore: false });
     const handleAction = requireSlackHandleAction();
@@ -141,6 +160,41 @@ describe("slackPlugin actions", () => {
       {},
       undefined,
     );
+  });
+});
+
+describe("slackPlugin status", () => {
+  it("uses the direct Slack probe helper when runtime is not initialized", async () => {
+    const probeSpy = vi.spyOn(probeModule, "probeSlack").mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      bot: { id: "B1", name: "openclaw-bot" },
+      team: { id: "T1", name: "OpenClaw" },
+    });
+    clearSlackRuntime();
+    const cfg = {
+      channels: {
+        slack: {
+          botToken: "xoxb-test",
+          appToken: "xapp-test",
+        },
+      },
+    } as OpenClawConfig;
+    const account = slackPlugin.config.resolveAccount(cfg, "default");
+
+    const result = await slackPlugin.status!.probeAccount!({
+      account,
+      timeoutMs: 2500,
+      cfg,
+    });
+
+    expect(probeSpy).toHaveBeenCalledWith("xoxb-test", 2500);
+    expect(result).toEqual({
+      ok: true,
+      status: 200,
+      bot: { id: "B1", name: "openclaw-bot" },
+      team: { id: "T1", name: "OpenClaw" },
+    });
   });
 });
 

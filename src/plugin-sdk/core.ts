@@ -105,6 +105,8 @@ export type { PluginRuntime } from "../plugins/runtime/types.js";
 export { definePluginEntry } from "./plugin-entry.js";
 export { buildPluginConfigSchema, emptyPluginConfigSchema } from "../plugins/config-schema.js";
 export { KeyedAsyncQueue, enqueueKeyedTask } from "./keyed-async-queue.js";
+export { createDedupeCache, resolveGlobalDedupeCache } from "../infra/dedupe.js";
+export { generateSecureToken, generateSecureUuid } from "../infra/secure-random.js";
 export { delegateCompactionToRuntime } from "../context-engine/delegate.js";
 export { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 export { buildChannelConfigSchema } from "../channels/plugins/config-schema.js";
@@ -139,6 +141,7 @@ export type { SecretFileReadOptions, SecretFileReadResult } from "../infra/secre
 export { resolveGatewayBindUrl } from "../shared/gateway-bind-url.js";
 export type { GatewayBindUrlResult } from "../shared/gateway-bind-url.js";
 export { resolveGatewayPort } from "../config/paths.js";
+export { createSubsystemLogger } from "../logging/subsystem.js";
 export { normalizeAtHashSlug, normalizeHyphenSlug } from "../shared/string-normalization.js";
 
 export { resolveTailnetHostWithRunner } from "../shared/tailscale-status.js";
@@ -215,6 +218,7 @@ type DefineChannelPluginEntryOptions<TPlugin = ChannelPlugin> = {
   plugin: TPlugin;
   configSchema?: OpenClawPluginConfigSchema | (() => OpenClawPluginConfigSchema);
   setRuntime?: (runtime: PluginRuntime) => void;
+  registerCliMetadata?: (api: OpenClawPluginApi) => void;
   registerFull?: (api: OpenClawPluginApi) => void;
 };
 
@@ -278,6 +282,7 @@ export function defineChannelPluginEntry<TPlugin>({
   plugin,
   configSchema = emptyPluginConfigSchema,
   setRuntime,
+  registerCliMetadata,
   registerFull,
 }: DefineChannelPluginEntryOptions<TPlugin>): DefinedChannelPluginEntry<TPlugin> {
   const resolvedConfigSchema = typeof configSchema === "function" ? configSchema() : configSchema;
@@ -287,11 +292,16 @@ export function defineChannelPluginEntry<TPlugin>({
     description,
     configSchema: resolvedConfigSchema,
     register(api: OpenClawPluginApi) {
+      if (api.registrationMode === "cli-metadata") {
+        registerCliMetadata?.(api);
+        return;
+      }
       setRuntime?.(api.runtime);
       api.registerChannel({ plugin: plugin as ChannelPlugin });
       if (api.registrationMode !== "full") {
         return;
       }
+      registerCliMetadata?.(api);
       registerFull?.(api);
     },
   };
@@ -516,6 +526,10 @@ export function createChatChannelPlugin<
 }): ChannelPlugin<TResolvedAccount, Probe, Audit> {
   return {
     ...params.base,
+    conversationBindings: {
+      supportsCurrentConversationBinding: true,
+      ...params.base.conversationBindings,
+    },
     ...(params.security ? { security: resolveChatChannelSecurity(params.security) } : {}),
     ...(params.pairing ? { pairing: resolveChatChannelPairing(params.pairing) } : {}),
     ...(params.threading ? { threading: resolveChatChannelThreading(params.threading) } : {}),
